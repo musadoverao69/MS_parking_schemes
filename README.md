@@ -1,4 +1,4 @@
-# 🚗⚡ E-Mobility Parking Simulation
+#  E-Mobility Parking Simulation
 
 Complete simulation system for analyzing electric vehicle charging station allocation in parking lots.
 
@@ -7,19 +7,19 @@ Complete simulation system for analyzing electric vehicle charging station alloc
 
 ---
 
-## 📋 Overview
+##  Overview
 
 This project implements a **discrete event simulation** to analyze different parking allocation schemes for electric vehicles in a shopping mall context, considering:
 
-- 📏 **Distance** from entrance (convenience factor)
-- 🔋 **Battery Level** (charging urgency)
-- 💰 **Price** (economic factor)
+-  **Distance** from entrance (convenience factor)
+-  **Battery Level** (charging urgency)
+-  **Price** (economic factor)
 
 **Key Innovation:** Triple trade-off model combining location, battery urgency, and pricing strategy.
 
 ---
 
-## 🎯 What This Simulation Does
+##  What This Simulation Does
 
 1. **Models realistic driver behavior** based on battery level and price sensitivity
 2. **Compares 4 allocation schemes** (ON_DEMAND, EXCLUSIVE, PRIORITY, RESERVATION)
@@ -34,12 +34,12 @@ This project implements a **discrete event simulation** to analyze different par
 ```
 Simulation/
 │
-├── config.py              # ⚙️  All configurations - EDIT HERE
-├── simulator.py           # 🎯 Main simulator - RUN THIS
-├── comparator.py          # 📊 Scenario comparator - ANALYZE WITH THIS
-├── test_simpy.py          # ✅ Installation test
-├── README.md              # 📄 This file
-├── requirements.txt       # 📦 Dependencies
+├── config.py              #   All configurations - EDIT HERE
+├── simulator.py           #  Main simulator - RUN THIS
+├── comparator.py          #  Scenario comparator - ANALYZE WITH THIS
+├── test_simpy.py          #  Installation test
+├── README.md              #  This file
+├── requirements.txt       #  Dependencies
 │
 ├── models/                # Python module (4 files)
 │   ├── __init__.py
@@ -57,7 +57,7 @@ Total: 14 files (optimized structure)
 
 ---
 
-## 🚀 Quick Start
+##  Quick Start
 
 ### Installation
 
@@ -132,7 +132,7 @@ SIMULATION_TIME = 480        # 8 hours
 
 ---
 
-## 📊 Allocation Schemes
+##  Allocation Schemes
 
 ### 1. ON_DEMAND
 **How it works:** EVs try charging stations first, but can use regular spots if CS are full or too far/expensive.
@@ -164,7 +164,7 @@ SIMULATION_TIME = 480        # 8 hours
 
 ---
 
-## 🏗️ System Architecture
+##  System Architecture
 
 ### Entities (4)
 
@@ -190,7 +190,7 @@ SIMULATION_TIME = 480        # 8 hours
 
 ---
 
-## 📈 Metrics & KPIs
+##  Metrics & KPIs
 
 ### Metrics Collected (30+)
 
@@ -262,7 +262,7 @@ max_price = $5.00 × (200% × 1.5) / 100 = $15.00
 
 ## 📊 Key Findings
 
-### Finding 1: Location is CRITICAL 🎯
+### Finding 1: Location is CRITICAL 
 
 ```
 CS at 30m:   92.6% utilization ✅
@@ -272,7 +272,7 @@ CS at 150m:  0.0% utilization ❌
 
 **Insight:** Better to have **5 spots at 30m** than **10 spots at 150m**!
 
-### Finding 2: Price Matters MORE Than Distance 💰
+### Finding 2: Price Matters MORE Than Distance 
 
 ```
 Price rejections:    35
@@ -281,7 +281,7 @@ Distance rejections: 22
 
 **Insight:** Drivers are **61% more sensitive to price** than to distance!
 
-### Finding 3: Balance Wins ⚖️
+### Finding 3: Balance Wins 
 
 ```
 CS-Near (30m, $12/h):  High price → 25 price rejections
@@ -291,7 +291,7 @@ CS-Far (150m, $6/h):   Too far → 0 usage even with low price
 
 **Insight:** Middle ground (moderate distance, moderate price) is optimal!
 
-### Finding 4: Best Scheme Depends on Goals 🎯
+### Finding 4: Best Scheme Depends on Goals 
 
 **For Revenue:** EXCLUSIVE + Premium pricing = $752.85/day  
 **For Service:** ON_DEMAND + Competitive pricing = 86% CS adoption  
@@ -299,7 +299,7 @@ CS-Far (150m, $6/h):   Too far → 0 usage even with low price
 
 ---
 
-## 🔬 Running Experiments
+##  Running Experiments
 
 See [`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md) for 12 complete experiments:
 
@@ -324,7 +324,7 @@ Each experiment includes:
 
 ---
 
-## 💻 Code Examples
+##  Code Examples
 
 ### Simple Simulation
 
@@ -360,21 +360,21 @@ python3 simulator.py
 
 ---
 
-## 📊 Sample Output
+## Sample Output
 
 ```
 FINAL RESULTS
 ═══════════════════════════════════════════════════════════════
 
-📊 VEHICLES:
+ VEHICLES:
   Total: 113 (33 EVs)
   Served: 95 (23 EVs served at CS, 10 at regular)
 
-⏱️ WAIT TIMES:
+ WAIT TIMES:
   EVs: 19.20 min average
   Regular: 0.00 min average
 
-🔌 CHARGING STATIONS:
+ CHARGING STATIONS:
   CS-Near (30m, $12/h):
     ✅ Served: 14 | Usage: 81.6% | Revenue: $235.00
     ⚠️ Rejections: 0 (distance) + 29 (price)
@@ -387,12 +387,12 @@ FINAL RESULTS
     ❌ Served: 0 | Usage: 0.0% | Revenue: $0.00
     ⚠️ Rejections: 21 (distance) + 0 (price)
 
-💰 FINANCIAL:
+ FINANCIAL:
   Total revenue: $752.85
   Revenue/hour: $94.11
   CS contribution: 42.9%
 
-🚗 DECISIONS:
+ DECISIONS:
   EVs at CS: 23/33 (69.7%)
   Price rejections: 41 total
   Distance rejections: 30 total
@@ -404,19 +404,19 @@ FINAL RESULTS
 
 ### Research Questions Answered
 
-1. ✅ **How does location affect CS usage?**
+1.  **How does location affect CS usage?**
    - Answer: Dramatic - 92.6% at 30m vs 0% at 150m
 
-2. ✅ **Is price or distance more important?**
+2.  **Is price or distance more important?**
    - Answer: Price (35 rejections) > Distance (22 rejections)
 
-3. ✅ **What's the optimal CS location?**
+3.  **What's the optimal CS location?**
    - Answer: Within 50m of entrance
 
-4. ✅ **Which allocation scheme performs best?**
+4.  **Which allocation scheme performs best?**
    - Answer: Depends on objectives (revenue vs service vs efficiency)
 
-5. ✅ **How do battery levels affect decisions?**
+5.  **How do battery levels affect decisions?**
    - Answer: Critical battery accepts any price/distance; High battery very selective
 
 ### Contributions
@@ -428,7 +428,7 @@ FINAL RESULTS
 
 ---
 
-## 🛠️ Technical Implementation
+##  Technical Implementation
 
 ### Technologies
 - **Python 3.9+**
@@ -442,15 +442,15 @@ FINAL RESULTS
 - **Configuration Pattern** - Centralized config.py
 
 ### Code Quality
-- ✅ Zero code duplication
-- ✅ Type-safe enumerations
-- ✅ Clear naming (100% English)
-- ✅ Comprehensive docstrings
-- ✅ Modular design (models/ module)
+-  Zero code duplication
+-  Type-safe enumerations
+-  Clear naming (100% English)
+-  Comprehensive docstrings
+-  Modular design (models/ module)
 
 ---
 
-## 📚 Documentation
+##  Documentation
 
 **Essential documentation in `docs/` (3 files):**
 
@@ -474,7 +474,7 @@ FINAL RESULTS
 
 ---
 
-## 💡 Usage Examples
+##  Usage Examples
 
 ### Example 1: Test High EV Demand
 
@@ -542,7 +542,7 @@ python3 comparator.py
 
 ---
 
-## 🎯 Practical Recommendations
+##  Practical Recommendations
 
 ### For Shopping Mall Operators
 
@@ -564,7 +564,7 @@ python3 comparator.py
 
 ---
 
-## 🔧 Extending the Project
+##  Extending the Project
 
 ### Add New Metrics
 
@@ -601,7 +601,7 @@ CHARGING_STATIONS_CONFIG = [
 
 ---
 
-## 🐛 Troubleshooting
+##  Troubleshooting
 
 ### Issue: "ModuleNotFoundError: No module named 'models'"
 
@@ -625,23 +625,23 @@ parking_lot = run_simulation(verbose=True)  # Show detailed logs
 
 ---
 
-## ✅ Project Features
+##  Project Features
 
-- ✅ **4 allocation schemes** fully implemented
-- ✅ **Distributed charging stations** with physical locations
-- ✅ **3 decision factors** (Distance × Battery × Price)
-- ✅ **4 battery levels** with realistic behavior
-- ✅ **3 economic profiles** for customer segmentation
-- ✅ **30+ metrics** automatically collected
-- ✅ **10 KPIs** for performance evaluation
-- ✅ **27 scenario comparisons** in comparator
-- ✅ **Complete financial analysis** with revenue tracking
-- ✅ **Professional code** (English, modular, documented)
-- ✅ **Comprehensive documentation** (ENTITIES, METRICS, EXPERIMENTS)
+-  **4 allocation schemes** fully implemented
+-  **Distributed charging stations** with physical locations
+-  **3 decision factors** (Distance × Battery × Price)
+-  **4 battery levels** with realistic behavior
+-  **3 economic profiles** for customer segmentation
+-  **30+ metrics** automatically collected
+-  **10 KPIs** for performance evaluation
+-  **27 scenario comparisons** in comparator
+-  **Complete financial analysis** with revenue tracking
+-  **Professional code** (English, modular, documented)
+-  **Comprehensive documentation** (ENTITIES, METRICS, EXPERIMENTS)
 
 ---
 
-## 📖 Further Reading
+##  Further Reading
 
 - **System Model:** [`docs/ENTITIES.md`](docs/ENTITIES.md) - Understand entities and properties
 - **Measurements:** [`docs/METRICS.md`](docs/METRICS.md) - Understand what is measured
@@ -649,7 +649,7 @@ parking_lot = run_simulation(verbose=True)  # Show detailed logs
 
 ---
 
-## 📞 Quick Reference
+##  Quick Reference
 
 ```bash
 # Install
@@ -675,7 +675,7 @@ cat docs/EXPERIMENTS.md
 
 ---
 
-## 🏆 Project Statistics
+## Project Statistics
 
 - **Total Files:** 14
 - **Python Scripts:** 4
@@ -690,7 +690,7 @@ cat docs/EXPERIMENTS.md
 ---
 
 **Version:** 4.0 Final  
-**Status:** ✅ Production Ready  
+**Status:**  Production Ready  
 **Language:** English  
 **Date:** October 2025  
 **License:** Academic Project  
