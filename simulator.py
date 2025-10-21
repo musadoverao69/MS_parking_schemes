@@ -112,6 +112,12 @@ def vehicle_process(env, name, parking_lot, is_ev, battery_level=None, economic_
     priority = 1
     chosen_price = parking_lot.regular_price
     
+    # Print arrival
+    vehicle_type = "EV" if is_ev else "Regular"
+    if is_ev and battery_level and economic_profile:
+        vehicle_type = f"EV ({battery_level.value}/{economic_profile.value})"
+    print(f"[{env.now:6.1f}min] {name:8s} ({vehicle_type:20s}) arrived")
+    
     if is_ev and battery_level and economic_profile:
         # EV decision logic
         charging_station = parking_lot.choose_charging_station(battery_level, economic_profile)
@@ -195,6 +201,13 @@ def process_stay(env, parking_lot, is_ev, arrival, chosen_price, charging_statio
     wait_time = env.now - arrival
     parking_lot.total_wait_time += wait_time
     
+    # Print parking action
+    spot_name = charging_station.name if charging_station else "Regular"
+    if wait_time > 0:
+        print(f"[{env.now:6.1f}min]          → Parked at {spot_name:12s} (${chosen_price:.2f}/h) [waited {wait_time:.1f}min]")
+    else:
+        print(f"[{env.now:6.1f}min]          → Parked at {spot_name:12s} (${chosen_price:.2f}/h)")
+    
     if is_ev:
         parking_lot.ev_wait_time += wait_time
         parking_lot.num_ev_waits += 1
@@ -208,6 +221,9 @@ def process_stay(env, parking_lot, is_ev, arrival, chosen_price, charging_statio
     # Calculate cost
     hours = parking_duration / 60.0
     cost = hours * chosen_price
+    
+    # Print departure
+    print(f"[{env.now:6.1f}min]          ← Departed from {spot_name:12s} (stayed {parking_duration}min, paid ${cost:.2f})")
     
     # Update statistics
     if charging_station:
@@ -255,73 +271,163 @@ def status_monitor(env, parking_lot, interval=120):
     """Monitor status periodically"""
     while True:
         yield env.timeout(interval)
+        print("\n" + "─" * 100)
         parking_lot.print_status()
+        
+        # Print running statistics
+        if parking_lot.total_evs > 0:
+            evs_at_cs = sum(cs.vehicles_served for cs in parking_lot.charging_stations)
+            adoption = (evs_at_cs / parking_lot.total_evs) * 100 if parking_lot.total_evs > 0 else 0
+            print(f"\n  📊 Running Stats:")
+            print(f"     EVs arrived: {parking_lot.total_evs} | At CS: {evs_at_cs} ({adoption:.1f}%)")
+            if parking_lot.num_ev_waits > 0:
+                avg_wait = parking_lot.ev_wait_time / parking_lot.num_ev_waits
+                print(f"     Avg EV wait: {avg_wait:.2f} min | Revenue: ${parking_lot.total_revenue:.2f}")
+        print("─" * 100 + "\n")
 
 
 def print_configuration():
     """Print simulation configuration"""
-    print("=" * 100)
-    print("E-MOBILITY PARKING SIMULATOR - Charging Stations System")
+    print("\n" + "=" * 100)
+    print("🚗⚡ E-MOBILITY PARKING SIMULATOR - Charging Stations System")
     print("=" * 100)
     print(f"\n⚙️  CONFIGURATION:")
-    print(f"  Scheme: {ALLOCATION_SCHEME.value.upper()}")
+    print(f"  Allocation Scheme: {ALLOCATION_SCHEME.value.upper()}")
     print(f"  Regular spots: {NUM_REGULAR_SPOTS} (${REGULAR_SPOT_PRICE:.2f}/h)")
-    print(f"\n  Charging Stations:")
+    
+    total_ev_spots = sum(spots for _, _, spots, _ in CHARGING_STATIONS_CONFIG)
+    print(f"\n  🔌 Charging Stations (Total: {total_ev_spots} EV spots):")
     for name, dist, spots, price in CHARGING_STATIONS_CONFIG:
-        print(f"    • {name}: {spots} spots, {dist}m, ${price:.2f}/h")
-    print(f"\n  Parameters:")
-    print(f"    • Time: {SIMULATION_TIME}min ({SIMULATION_TIME/60:.1f}h)")
+        print(f"    • {name:12s}: {spots} spots at {dist:3.0f}m from entrance, ${price:5.2f}/h")
+    
+    print(f"\n  📊 Simulation Parameters:")
+    print(f"    • Duration: {SIMULATION_TIME}min ({SIMULATION_TIME/60:.1f} hours)")
     print(f"    • EV probability: {PROB_EV*100:.0f}%")
-    print(f"    • Arrival interval: {ARRIVAL_INTERVAL}min")
+    print(f"    • Arrival interval: {ARRIVAL_INTERVAL}min (avg)")
+    print(f"    • Expected vehicles: ~{int(SIMULATION_TIME/ARRIVAL_INTERVAL)}")
+    print(f"    • Expected EVs: ~{int(SIMULATION_TIME/ARRIVAL_INTERVAL*PROB_EV)}")
+    
+    print(f"\n  🎯 Decision Model:")
+    print(f"    • Battery levels: 4 (CRITICAL, LOW, MEDIUM, HIGH)")
+    print(f"    • Economic profiles: 3 (BUDGET, MODERATE, PREMIUM)")
+    print(f"    • Trade-off: Distance × Battery × Price")
+    
     print("=" * 100)
+    print("🚀 Starting simulation...")
+    print("=" * 100 + "\n")
 
 
 def print_results(parking_lot):
     """Print final results"""
     print("\n" + "=" * 100)
-    print("FINAL RESULTS")
+    print("📊 FINAL RESULTS - SIMULATION COMPLETE")
     print("=" * 100)
     
+    # Calculate key metrics first
+    evs_at_cs = sum(cs.vehicles_served for cs in parking_lot.charging_stations)
+    adoption_rate = (evs_at_cs / parking_lot.total_evs * 100) if parking_lot.total_evs > 0 else 0
+    service_rate = (parking_lot.vehicles_served / parking_lot.total_vehicles * 100) if parking_lot.total_vehicles > 0 else 0
+    
     print(f"\n📊 VEHICLES:")
-    print(f"  Total: {parking_lot.total_vehicles} ({parking_lot.total_evs} EVs)")
-    print(f"  Served: {parking_lot.vehicles_served} ({parking_lot.evs_served} EVs)")
+    print(f"  Total arrived: {parking_lot.total_vehicles}")
+    print(f"    • Electric vehicles (EVs): {parking_lot.total_evs} ({parking_lot.total_evs/parking_lot.total_vehicles*100:.1f}%)")
+    print(f"    • Regular vehicles: {parking_lot.total_vehicles - parking_lot.total_evs} ({(parking_lot.total_vehicles-parking_lot.total_evs)/parking_lot.total_vehicles*100:.1f}%)")
+    print(f"\n  Total served: {parking_lot.vehicles_served} (Service rate: {service_rate:.1f}%)")
+    print(f"    • EVs served: {parking_lot.evs_served}")
+    print(f"    • Regular served: {parking_lot.vehicles_served - parking_lot.evs_served}")
     
     print(f"\n⏱️  WAIT TIMES:")
     if parking_lot.num_ev_waits > 0:
-        print(f"  EVs: {parking_lot.ev_wait_time / parking_lot.num_ev_waits:.2f} min")
+        avg_ev_wait = parking_lot.ev_wait_time / parking_lot.num_ev_waits
+        print(f"  EVs average: {avg_ev_wait:.2f} min")
+        if avg_ev_wait < 5:
+            print(f"    ✅ Excellent service (< 5 min)")
+        elif avg_ev_wait < 15:
+            print(f"    ✓  Good service (< 15 min)")
+        else:
+            print(f"    ⚠️  Poor service (> 15 min)")
     if parking_lot.num_regular_waits > 0:
-        print(f"  Regular: {parking_lot.regular_wait_time / parking_lot.num_regular_waits:.2f} min")
+        print(f"  Regular average: {parking_lot.regular_wait_time / parking_lot.num_regular_waits:.2f} min")
     
-    print(f"\n🔌 CHARGING STATIONS:")
-    for cs in parking_lot.charging_stations:
+    print(f"\n🔌 CHARGING STATIONS PERFORMANCE:")
+    total_cs_rejections_dist = 0
+    total_cs_rejections_price = 0
+    
+    for i, cs in enumerate(parking_lot.charging_stations, 1):
         usage_rate = (cs.total_usage_time / (SIMULATION_TIME * cs.num_spots)) * 100 if cs.total_usage_time > 0 else 0
-        print(f"\n  {cs.name} ({cs.distance_from_entrance}m, ${cs.price_per_hour:.2f}/h):")
-        print(f"    Served: {cs.vehicles_served} | Usage: {usage_rate:.1f}% | Revenue: ${cs.total_revenue:.2f}")
-        print(f"    Rejections: {cs.distance_rejections} (distance) + {cs.price_rejections} (price)")
+        total_cs_rejections_dist += cs.distance_rejections
+        total_cs_rejections_price += cs.price_rejections
+        
+        # Usage assessment
+        usage_status = "🟢 Good" if 60 <= usage_rate <= 80 else ("🟡 Low" if usage_rate < 60 else "🔴 High")
+        
+        print(f"\n  {i}. {cs.name} ({cs.distance_from_entrance:.0f}m from entrance, ${cs.price_per_hour:.2f}/h):")
+        print(f"     Vehicles served: {cs.vehicles_served}")
+        print(f"     Utilization: {usage_rate:.1f}% {usage_status}")
+        print(f"     Revenue: ${cs.total_revenue:.2f}")
+        if cs.vehicles_served > 0:
+            avg_revenue = cs.total_revenue / cs.vehicles_served
+            print(f"     Revenue per vehicle: ${avg_revenue:.2f}")
+        print(f"     Rejections: {cs.distance_rejections} (too far) + {cs.price_rejections} (too expensive)")
+        
+        # Insights
+        if cs.vehicles_served == 0:
+            print(f"     ⚠️  WARNING: No usage! Consider relocating or repricing")
+        elif usage_rate > 90:
+            print(f"     💡 High demand! Consider adding more spots here")
     
-    print(f"\n💰 FINANCIAL:")
+    print(f"\n💰 FINANCIAL ANALYSIS:")
     print(f"  Total revenue: ${parking_lot.total_revenue:.2f}")
     print(f"    • Regular spots: ${parking_lot.regular_revenue:.2f} "
           f"({parking_lot.regular_revenue/parking_lot.total_revenue*100 if parking_lot.total_revenue > 0 else 0:.1f}%)")
-    print(f"    • EV spots: ${parking_lot.ev_revenue:.2f} "
+    print(f"    • EV spots (CS): ${parking_lot.ev_revenue:.2f} "
           f"({parking_lot.ev_revenue/parking_lot.total_revenue*100 if parking_lot.total_revenue > 0 else 0:.1f}%)")
-    print(f"  Revenue/hour: ${parking_lot.total_revenue/(SIMULATION_TIME/60):.2f}")
     
-    print(f"\n🚗 DECISIONS:")
-    evs_at_cs = sum(cs.vehicles_served for cs in parking_lot.charging_stations)
-    print(f"  EVs at CS: {evs_at_cs}/{parking_lot.total_evs} "
-          f"({evs_at_cs/parking_lot.total_evs*100 if parking_lot.total_evs > 0 else 0:.1f}%)")
-    print(f"  EVs at regular: {parking_lot.evs_chose_regular_battery_ok + parking_lot.evs_chose_regular_price}")
+    revenue_per_hour = parking_lot.total_revenue/(SIMULATION_TIME/60)
+    print(f"\n  Revenue per hour: ${revenue_per_hour:.2f}")
+    print(f"  Daily projection (24h): ${revenue_per_hour * 24:.2f}")
+    print(f"  Monthly projection (30d): ${revenue_per_hour * 24 * 30:.2f}")
     
+    if parking_lot.vehicles_served > 0:
+        print(f"  Average per vehicle: ${parking_lot.total_revenue/parking_lot.vehicles_served:.2f}")
+    
+    print(f"\n🚗 EV DECISIONS & BEHAVIOR:")
+    print(f"  EVs at Charging Stations: {evs_at_cs}/{parking_lot.total_evs} ({adoption_rate:.1f}%)")
+    if adoption_rate >= 70:
+        print(f"    ✅ Good CS adoption rate")
+    elif adoption_rate >= 50:
+        print(f"    ⚠️  Moderate CS adoption")
+    else:
+        print(f"    ❌ Low CS adoption - check pricing/location")
+    
+    evs_at_regular = parking_lot.evs_chose_regular_battery_ok + parking_lot.evs_chose_regular_price
+    print(f"  EVs at regular spots: {evs_at_regular} ({evs_at_regular/parking_lot.total_evs*100 if parking_lot.total_evs > 0 else 0:.1f}%)")
+    if parking_lot.evs_chose_regular_battery_ok > 0:
+        print(f"    • Battery OK (didn't need charging): {parking_lot.evs_chose_regular_battery_ok}")
+    if parking_lot.evs_chose_regular_price > 0:
+        print(f"    • Rejected CS due to price: {parking_lot.evs_chose_regular_price}")
+    
+    print(f"\n  Total rejections:")
+    print(f"    • Distance rejections: {total_cs_rejections_dist}")
+    print(f"    • Price rejections: {total_cs_rejections_price}")
+    
+    if total_cs_rejections_price > total_cs_rejections_dist:
+        print(f"    💡 INSIGHT: Price matters MORE than distance!")
+    elif total_cs_rejections_dist > total_cs_rejections_price:
+        print(f"    💡 INSIGHT: Distance matters MORE than price!")
+    
+    print("\n" + "=" * 100)
+    print("✅ Simulation completed successfully!")
     print("=" * 100)
 
 
-def run_simulation(verbose=True):
+def run_simulation(verbose=True, show_vehicles=False):
     """
     Run a complete simulation
     
     Args:
-        verbose: If True, print detailed logs
+        verbose: If True, show periodic status updates
+        show_vehicles: If True, print each vehicle arrival/departure
     
     Returns:
         ParkingLot with collected statistics
@@ -334,7 +440,14 @@ def run_simulation(verbose=True):
     if verbose:
         env.process(status_monitor(env, parking_lot, interval=120))
     
+    # Progress indicator
+    if not show_vehicles:
+        print("Simulating", end="", flush=True)
+    
     env.run(until=SIMULATION_TIME)
+    
+    if not show_vehicles:
+        print(" ✓\n")
     
     return parking_lot
 
@@ -342,8 +455,41 @@ def run_simulation(verbose=True):
 def main():
     """Main function"""
     print_configuration()
-    parking_lot = run_simulation(verbose=False)
+    
+    # Run simulation with progress indicator
+    parking_lot = run_simulation(verbose=False, show_vehicles=False)
+    
+    # Print results
     print_results(parking_lot)
+    
+    # Additional insights
+    print("\n💡 KEY INSIGHTS:")
+    evs_at_cs = sum(cs.vehicles_served for cs in parking_lot.charging_stations)
+    
+    # Most popular CS
+    if parking_lot.charging_stations:
+        most_popular = max(parking_lot.charging_stations, key=lambda cs: cs.vehicles_served)
+        print(f"  • Most popular CS: {most_popular.name} ({most_popular.vehicles_served} vehicles)")
+        
+        # Most profitable CS
+        most_profitable = max(parking_lot.charging_stations, key=lambda cs: cs.total_revenue)
+        print(f"  • Most profitable CS: {most_profitable.name} (${most_profitable.total_revenue:.2f})")
+        
+        # Least used CS
+        least_used = min(parking_lot.charging_stations, key=lambda cs: cs.vehicles_served)
+        if least_used.vehicles_served == 0:
+            print(f"  • ⚠️  {least_used.name} had ZERO usage - consider removing or relocating")
+    
+    # CS adoption assessment
+    adoption = (evs_at_cs / parking_lot.total_evs * 100) if parking_lot.total_evs > 0 else 0
+    if adoption > 80:
+        print(f"  • ✅ Excellent CS adoption ({adoption:.1f}%)")
+    elif adoption > 60:
+        print(f"  • ✓  Good CS adoption ({adoption:.1f}%)")
+    else:
+        print(f"  • ⚠️  Low CS adoption ({adoption:.1f}%) - Review pricing or location")
+    
+    print("\n" + "=" * 100)
 
 
 if __name__ == '__main__':
