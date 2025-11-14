@@ -357,13 +357,13 @@ class ParkingLotVisualizerPygame:
             color = BLUE if vehicle.state == VehicleState.PARKED else LIGHT_BLUE
             dark_color = DARK_BLUE
         
-        # Tamanho do retângulo (carro) - maior quando estacionado
+        # Tamanho do retângulo (carro) - mais fino e mais longo
         if vehicle.state == VehicleState.PARKED:
-            width = 28
-            height = 18
+            width = 32  # Mais longo
+            height = 14  # Mais fino
         else:
-            width = 28
-            height = 18
+            width = 32  # Mais longo
+            height = 14  # Mais fino
         
         # Calcular ângulo de rotação baseado na direção
         if vehicle.state in [VehicleState.ARRIVING, VehicleState.DEPARTING]:
@@ -426,16 +426,26 @@ class ParkingLotVisualizerPygame:
         self.screen.blit(temp_surface, rotated_rect)
     
     def draw_stats_panel(self):
-        """Desenha o painel de estatísticas"""
+        """Desenha o painel de estatísticas com bordas arredondadas e fundo transparente"""
         panel_x = self.width - 280
         panel_y = 10
         panel_width = 270
         panel_height = self.height - 20
+        border_radius = 15  # Raio para bordas arredondadas
         
-        # Fundo do painel
-        panel_rect = pygame.Rect(panel_x, panel_y, panel_width, panel_height)
-        pygame.draw.rect(self.screen, DARK_GRAY, panel_rect)
-        pygame.draw.rect(self.screen, WHITE, panel_rect, 2)
+        # Criar superfície com transparência para o fundo
+        panel_surface = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
+        
+        # Fundo semi-transparente (mais transparente) - usar RGBA
+        bg_color = (*DARK_GRAY, 200)  # Alpha = 200 (de 255) para mais transparência
+        pygame.draw.rect(panel_surface, bg_color, (0, 0, panel_width, panel_height), border_radius=border_radius)
+        
+        # Borda mais suave e menos marcada - usar RGBA
+        border_color = (*LIGHT_GRAY, 120)  # Cinza claro com transparência (menos marcada)
+        pygame.draw.rect(panel_surface, border_color, (0, 0, panel_width, panel_height), width=1, border_radius=border_radius)
+        
+        # Aplicar superfície na tela
+        self.screen.blit(panel_surface, (panel_x, panel_y))
         
         # Título
         title = self.title_font.render("Estatisticas", True, WHITE)
