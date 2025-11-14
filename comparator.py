@@ -196,7 +196,7 @@ def compare_pricing_strategies():
     results = {}
     for strategy in config.PRICING_STRATEGIES.keys():
         print(f"🔄 {strategy}...", end=" ")
-        parking = simulate_scenario(AllocationScheme.EXCLUSIVE, "Mixed", strategy)
+        parking = simulate_scenario(AllocationScheme.ON_DEMAND, "Mixed", strategy)
         results[strategy] = parking
         print(f"✓")
     
@@ -215,7 +215,7 @@ def compare_global_top10():
     print("=" * 100)
     
     results = []
-    schemes = [AllocationScheme.ON_DEMAND, AllocationScheme.EXCLUSIVE, AllocationScheme.PRIORITY]
+    schemes = [AllocationScheme.ON_DEMAND, AllocationScheme.RESERVATION]
     total = len(schemes) * len(config.CS_CONFIGS_COMPARISON) * len(config.PRICING_STRATEGIES)
     counter = 0
     

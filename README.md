@@ -22,7 +22,7 @@ This project implements a **discrete event simulation** to analyze different par
 ##  What This Simulation Does
 
 1. **Models realistic driver behavior** based on battery level and price sensitivity
-2. **Compares 4 allocation schemes** (ON_DEMAND, EXCLUSIVE, PRIORITY, RESERVATION)
+2. **Compares 2 allocation schemes** (ON_DEMAND, RESERVATION)
 3. **Tests multiple pricing strategies** (Premium, Competitive, Uniform)
 4. **Analyzes 30+ metrics** including wait times, revenue, and utilization
 5. **Provides actionable insights** for real-world parking lot design
@@ -62,7 +62,10 @@ Total: 14 files (optimized structure)
 ### Installation
 
 ```bash
-# Install SimPy
+# Verify Python installation (Python 3.9+ required)
+python3 --version
+
+# Install dependencies (SimPy + Pygame for visualization)
 pip install -r requirements.txt
 
 # Verify installation
@@ -72,13 +75,19 @@ python3 test_simpy.py
 ### Run Your First Simulation
 
 ```bash
+# Simulação normal (sem visualização)
 python3 simulator.py
+
+# Simulação com visualização em tempo real
+python3 simulator.py --visualize
+# ou
+python3 simulator.py -v
 ```
 
 **Output example:**
 ```
 CONFIGURATION:
-  Scheme: EXCLUSIVE
+  Scheme: ON_DEMAND
   Regular spots: 50 ($5.00/h)
   Charging Stations:
     • CS-Near: 3 spots, 30m, $12.00/h
@@ -109,7 +118,7 @@ Runs 27 simulations automatically and shows TOP 10 best combinations.
 
 ```python
 # Allocation scheme
-ALLOCATION_SCHEME = AllocationScheme.EXCLUSIVE
+ALLOCATION_SCHEME = AllocationScheme.ON_DEMAND
 
 # Parking capacity
 NUM_REGULAR_SPOTS = 50
@@ -141,21 +150,7 @@ SIMULATION_TIME = 480        # 8 hours
 
 **Trade-off:** EVs may not charge if using regular spots
 
-### 2. EXCLUSIVE
-**How it works:** Charging station spots are EXCLUSIVE for electric vehicles. Regular cars CANNOT use them.
-
-**Best for:** Guaranteeing charging availability, promoting sustainability
-
-**Trade-off:** CS may be underutilized when few EVs arrive
-
-### 3. PRIORITY
-**How it works:** EVs have priority for CS, but regular cars can use empty CS when no EVs are waiting.
-
-**Best for:** Optimizing overall resource utilization
-
-**Trade-off:** More complex logic, regular cars may be displaced
-
-### 4. RESERVATION
+### 2. RESERVATION
 **How it works:** EVs can reserve CS in advance. Reserved EVs get priority over walk-ins.
 
 **Best for:** Predictable demand, user planning
@@ -181,8 +176,8 @@ SIMULATION_TIME = 480        # 8 hours
    - EV has: battery level, economic profile
    - Makes: location and price decisions
 
-4. **Enumerations** (3 types, 11 values)
-   - AllocationScheme (4): ON_DEMAND, EXCLUSIVE, PRIORITY, RESERVATION
+4. **Enumerations** (3 types, 9 values)
+   - AllocationScheme (2): ON_DEMAND, RESERVATION
    - BatteryLevel (4): CRITICAL, LOW, MEDIUM, HIGH
    - EconomicProfile (3): BUDGET, MODERATE, PREMIUM
 
@@ -293,9 +288,9 @@ CS-Far (150m, $6/h):   Too far → 0 usage even with low price
 
 ### Finding 4: Best Scheme Depends on Goals 
 
-**For Revenue:** EXCLUSIVE + Premium pricing = $752.85/day  
+**For Revenue:** RESERVATION + Premium pricing = Higher revenue potential
 **For Service:** ON_DEMAND + Competitive pricing = 86% CS adoption  
-**For Efficiency:** PRIORITY = Best overall resource utilization
+**For Flexibility:** ON_DEMAND = Best overall resource utilization
 
 ---
 
@@ -357,6 +352,69 @@ CHARGING_STATIONS_CONFIG = [
 # Run
 python3 simulator.py
 ```
+
+---
+
+## 🎨 Visualização em Tempo Real
+
+O simulador suporta visualização em tempo real do parking lot usando **Pygame**.
+
+### Como Usar
+
+```bash
+# Ativar visualização
+python3 simulator.py --visualize
+# ou
+python3 simulator.py -v
+```
+
+### O que Você Verá
+
+- **Layout do Parking Lot:**
+  - Entrada do shopping (cinza)
+  - Área de vagas regulares (azul claro)
+  - Estações de carregamento (verde) com nome, preço e número de vagas
+
+- **Veículos em Tempo Real:**
+  - 🟢 **Verde** = Veículos Elétricos (EVs)
+  - 🔵 **Azul** = Veículos Regulares
+  - ⬜ **Quadrado** = Veículo estacionado
+  - ⭕ **Círculo** = Veículo em movimento (chegando/saindo)
+
+- **Estatísticas ao Vivo:**
+  - Tempo de simulação
+  - Total de veículos e EVs
+  - Taxa de adoção de CS
+  - Receita acumulada
+  - Utilização por estação
+
+### Requisitos
+
+A visualização requer Pygame (já incluído no `requirements.txt`):
+
+```bash
+pip install pygame
+```
+
+### Controles (Pygame)
+
+- **SPACE:** Pausar/Retomar simulação
+- **UP/DOWN:** Aumentar/Diminuir velocidade
+- **ESC:** Sair da visualização
+- **Fechar janela:** Finaliza a simulação
+
+### Exemplo de Uso
+
+```python
+from simulator import run_simulation
+
+# Rodar com visualização
+parking_lot = run_simulation(visualize=True)
+```
+
+**Nota:** A visualização roda em tempo real, mostrando os eventos conforme acontecem na simulação.
+
+Para mais detalhes sobre opções de visualização, veja [`docs/VISUALIZATION.md`](docs/VISUALIZATION.md).
 
 ---
 
@@ -516,7 +574,7 @@ python3 comparator.py
 ## 📈 Main Results Summary
 
 ### Best Overall Configuration
-**EXCLUSIVE × Mixed CS × Competitive Pricing**
+**RESERVATION × Mixed CS × Competitive Pricing**
 - Revenue: $551.90/day
 - EV wait time: 7.74 minutes
 - CS adoption: 57%
@@ -535,7 +593,7 @@ python3 comparator.py
    - CRITICAL: Accepts any price/distance
    - HIGH: Very selective (proximity/price)
 
-4. **EXCLUSIVE Scheme for Revenue**
+4. **RESERVATION Scheme for Revenue**
    - Forces EVs to use CS
    - Higher CS utilization
    - Better revenue from premium pricing
@@ -554,9 +612,9 @@ python3 comparator.py
    - Prices above $10/h cause significant rejections
    - Balance between revenue and adoption
 
-3. **Use EXCLUSIVE or PRIORITY scheme**
-   - EXCLUSIVE: Maximum CS revenue
-   - PRIORITY: Best overall efficiency
+3. **Choose the right scheme**
+   - RESERVATION: Maximum CS revenue and adoption
+   - ON_DEMAND: Best overall flexibility
 
 4. **Avoid far CS even with low prices**
    - CS at 150m had 0% usage even at $6/hour

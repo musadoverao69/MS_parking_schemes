@@ -10,26 +10,26 @@ from models import AllocationScheme, BatteryLevel, EconomicProfile
 # GENERAL SIMULATION SETTINGS
 # ============================================================================
 
-RANDOM_SEED = 42                    # Seed for reproducibility
-NUM_REGULAR_SPOTS = 50             # Number of regular parking spots
-SIMULATION_TIME = 480              # Time in minutes (480 = 8 hours)
-ARRIVAL_INTERVAL = 5               # Minutes between arrivals (average)
-PROB_EV = 0.3                      # Probability of vehicle being EV (30%)
+RANDOM_SEED = 42# Seed for reproducibility
+NUM_REGULAR_SPOTS = 50# Number of regular parking spots
+SIMULATION_TIME = 480# Time in minutes (480 = 8 hours)
+ARRIVAL_INTERVAL = 5# Minutes between arrivals (average)
+PROB_EV = 0.3# Probability of vehicle being EV (30%)
 PARKING_TIME = (30, 120)           # Min and max parking duration (minutes)
-PROB_RESERVATION = 0.4             # Probability of EV having reservation (40%)
+PROB_RESERVATION = 0.4# Probability of EV having reservation (40%)
 
 # ============================================================================
 # ALLOCATION SCHEME
 # ============================================================================
 
-# Options: ON_DEMAND, EXCLUSIVE, PRIORITY, RESERVATION
-ALLOCATION_SCHEME = AllocationScheme.EXCLUSIVE
+# Options: ON_DEMAND, RESERVATION
+ALLOCATION_SCHEME = AllocationScheme.ON_DEMAND
 
 # ============================================================================
 # PRICES ($ per hour)
 # ============================================================================
 
-REGULAR_SPOT_PRICE = 5.0          # Regular spot price
+REGULAR_SPOT_PRICE = 5.0# Regular spot price
 
 # ============================================================================
 # CHARGING STATIONS
@@ -37,9 +37,9 @@ REGULAR_SPOT_PRICE = 5.0          # Regular spot price
 
 # Format: (name, distance_meters, num_spots, price_per_hour)
 CHARGING_STATIONS_CONFIG = [
-    ("CS-Near", 30, 3, 12.0),      # Close, expensive
-    ("CS-Mid", 80, 4, 8.0),        # Medium distance, medium price
-    ("CS-Far", 150, 3, 6.0),       # Far, cheap
+    ("CS-Near", 30, 3, 12.0),
+    ("CS-Mid", 80, 4, 8.0),
+    ("CS-Far", 150, 3, 6.0),
 ]
 
 # ============================================================================

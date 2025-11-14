@@ -7,8 +7,6 @@ from enum import Enum
 class AllocationScheme(Enum):
     """Parking allocation schemes"""
     ON_DEMAND = "on_demand"      # EVs try EV spots first, can use regular if needed
-    EXCLUSIVE = "exclusive"      # EV spots are exclusive for electric vehicles
-    PRIORITY = "priority"        # EVs have priority, but regular cars can use empty EV spots
     RESERVATION = "reservation"  # System with advance reservations
 
 

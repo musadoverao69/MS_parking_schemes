@@ -2,7 +2,7 @@
 MAIN SIMULATOR - E-Mobility Parking Lot
 
 Complete simulator with all features:
-- 4 Allocation Schemes (ON_DEMAND, EXCLUSIVE, PRIORITY, RESERVATION)
+- 2 Allocation Schemes (ON_DEMAND, RESERVATION)
 - Charging Stations at different locations
 - EV battery levels
 - Differentiated pricing
@@ -12,7 +12,8 @@ Triple trade-off: Distance × Battery × Price
 """
 import simpy
 import random
-from typing import List
+import argparse
+from typing import List, Optional
 
 # Import classes and configuration
 from models import (
@@ -29,9 +30,10 @@ from config import *
 class ParkingLot:
     """Parking lot with Charging Stations and complete allocation system"""
     
-    def __init__(self, env, scheme):
+    def __init__(self, env, scheme, visualizer=None):
         self.env = env
         self.scheme = scheme
+        self.visualizer = visualizer
         self.regular_spots = simpy.Resource(env, capacity=NUM_REGULAR_SPOTS)
         self.regular_price = REGULAR_SPOT_PRICE
         
@@ -118,32 +120,21 @@ def vehicle_process(env, name, parking_lot, is_ev, battery_level=None, economic_
         vehicle_type = f"EV ({battery_level.value}/{economic_profile.value})"
     print(f"[{env.now:6.1f}min] {name:8s} ({vehicle_type:20s}) arrived")
     
+    # Notify visualizer
+    if parking_lot.visualizer:
+        parking_lot.visualizer.add_event({
+            'type': 'vehicle_arrive',
+            'vehicle_id': name,
+            'is_ev': is_ev,
+            'battery_level': battery_level.value if battery_level else None
+        })
+    
     if is_ev and battery_level and economic_profile:
         # EV decision logic
         charging_station = parking_lot.choose_charging_station(battery_level, economic_profile)
         
-        if scheme == AllocationScheme.EXCLUSIVE:
-            # EXCLUSIVE: Only uses CS
-            if charging_station:
-                spot = charging_station.resource
-                chosen_price = charging_station.price_per_hour
-            else:
-                charging_station = parking_lot.charging_stations[0]
-                spot = charging_station.resource
-                chosen_price = charging_station.price_per_hour
-        
-        elif scheme == AllocationScheme.ON_DEMAND:
+        if scheme == AllocationScheme.ON_DEMAND:
             # ON_DEMAND: Tries CS, can use regular
-            if charging_station:
-                spot = charging_station.resource
-                chosen_price = charging_station.price_per_hour
-            else:
-                spot = parking_lot.regular_spots
-                charging_station = None
-                parking_lot.evs_chose_regular_battery_ok += 1
-        
-        elif scheme == AllocationScheme.PRIORITY:
-            # PRIORITY: EV has priority
             if charging_station:
                 spot = charging_station.resource
                 chosen_price = charging_station.price_per_hour
@@ -165,38 +156,24 @@ def vehicle_process(env, name, parking_lot, is_ev, battery_level=None, economic_
                 parking_lot.evs_chose_regular_battery_ok += 1
     
     else:
-        # Regular vehicle
-        if scheme == AllocationScheme.PRIORITY:
-            if parking_lot.regular_spots.count < parking_lot.regular_spots.capacity:
-                spot = parking_lot.regular_spots
-            else:
-                for cs in parking_lot.charging_stations:
-                    if cs.resource.count < cs.resource.capacity and len(cs.resource.queue) == 0:
-                        spot = cs.resource
-                        charging_station = cs
-                        chosen_price = cs.price_per_hour
-                        parking_lot.regular_used_ev += 1
-                        break
-                if not spot:
-                    spot = parking_lot.regular_spots
-        else:
-            spot = parking_lot.regular_spots
+        # Regular vehicle - only uses regular spots
+        spot = parking_lot.regular_spots
     
     # Process parking
     try:
         if use_priority:
             with spot.request(priority=priority) as request:
                 yield request
-                yield from process_stay(env, parking_lot, is_ev, arrival, chosen_price, charging_station)
+                yield from process_stay(env, name, parking_lot, is_ev, arrival, chosen_price, charging_station)
         else:
             with spot.request() as request:
                 yield request
-                yield from process_stay(env, parking_lot, is_ev, arrival, chosen_price, charging_station)
+                yield from process_stay(env, name, parking_lot, is_ev, arrival, chosen_price, charging_station)
     except simpy.Interrupt:
         pass
 
 
-def process_stay(env, parking_lot, is_ev, arrival, chosen_price, charging_station):
+def process_stay(env, vehicle_name, parking_lot, is_ev, arrival, chosen_price, charging_station):
     """Process parking duration and statistics"""
     wait_time = env.now - arrival
     parking_lot.total_wait_time += wait_time
@@ -207,6 +184,15 @@ def process_stay(env, parking_lot, is_ev, arrival, chosen_price, charging_statio
         print(f"[{env.now:6.1f}min]          → Parked at {spot_name:12s} (${chosen_price:.2f}/h) [waited {wait_time:.1f}min]")
     else:
         print(f"[{env.now:6.1f}min]          → Parked at {spot_name:12s} (${chosen_price:.2f}/h)")
+    
+    # Notify visualizer
+    if parking_lot.visualizer:
+        parking_lot.visualizer.add_event({
+            'type': 'vehicle_park',
+            'vehicle_id': vehicle_name,
+            'spot_name': spot_name,
+            'is_cs': charging_station is not None
+        })
     
     if is_ev:
         parking_lot.ev_wait_time += wait_time
@@ -224,6 +210,13 @@ def process_stay(env, parking_lot, is_ev, arrival, chosen_price, charging_statio
     
     # Print departure
     print(f"[{env.now:6.1f}min]          ← Departed from {spot_name:12s} (stayed {parking_duration}min, paid ${cost:.2f})")
+    
+    # Notify visualizer
+    if parking_lot.visualizer:
+        parking_lot.visualizer.add_event({
+            'type': 'vehicle_depart',
+            'vehicle_id': vehicle_name
+        })
     
     # Update statistics
     if charging_station:
@@ -421,32 +414,81 @@ def print_results(parking_lot):
     print("=" * 100)
 
 
-def run_simulation(verbose=True, show_vehicles=False):
+def run_simulation(verbose=True, show_vehicles=False, visualize=False):
     """
     Run a complete simulation
     
     Args:
         verbose: If True, show periodic status updates
         show_vehicles: If True, print each vehicle arrival/departure
+        visualize: If True, show real-time visualization
     
     Returns:
         ParkingLot with collected statistics
     """
     random.seed(RANDOM_SEED)
     env = simpy.Environment()
+    
+    # Create parking lot first
     parking_lot = ParkingLot(env, ALLOCATION_SCHEME)
+    
+    # Create visualizer if requested
+    visualizer = None
+    if visualize:
+        try:
+            from visualizer_pygame import create_visualizer
+            config_dict = {
+                'NUM_REGULAR_SPOTS': NUM_REGULAR_SPOTS,
+                'CHARGING_STATIONS_CONFIG': CHARGING_STATIONS_CONFIG
+            }
+            visualizer = create_visualizer(parking_lot, config_dict)
+            parking_lot.visualizer = visualizer
+            print("🎮 Visualização Pygame ativada!")
+        except ImportError:
+            print("⚠️  Pygame não instalado.")
+            print("   Execute: pip install pygame")
+            visualize = False
     
     env.process(vehicle_generator(env, parking_lot))
     if verbose:
         env.process(status_monitor(env, parking_lot, interval=120))
     
     # Progress indicator
-    if not show_vehicles:
+    if not show_vehicles and not visualize:
         print("Simulating", end="", flush=True)
     
-    env.run(until=SIMULATION_TIME)
+    # Run simulation
+    if visualize:
+        # Pygame: rodar em thread separada
+        import threading
+        import time
+        
+        def run_simulation():
+            """Roda a simulação em thread separada"""
+            step_size = 0.5  # Passos menores para simulação mais lenta
+            current_time = 0.0
+            
+            while current_time < SIMULATION_TIME and visualizer.running:
+                next_time = min(current_time + step_size, SIMULATION_TIME)
+                env.run(until=next_time)
+                current_time = next_time
+                time.sleep(0.05)  # Delay maior para simulação mais lenta
+        
+        # Iniciar simulação em thread
+        sim_thread = threading.Thread(target=run_simulation, daemon=True)
+        sim_thread.start()
+        
+        # Rodar visualização (bloqueia até fechar)
+        try:
+            visualizer.run()
+        except KeyboardInterrupt:
+            print("\n⏹️  Simulação interrompida")
+        finally:
+            visualizer.close()
+    else:
+        env.run(until=SIMULATION_TIME)
     
-    if not show_vehicles:
+    if not show_vehicles and not visualize:
         print(" ✓\n")
     
     return parking_lot
@@ -454,13 +496,28 @@ def run_simulation(verbose=True, show_vehicles=False):
 
 def main():
     """Main function"""
+    parser = argparse.ArgumentParser(description='E-Mobility Parking Lot Simulator')
+    parser.add_argument('--visualize', '-v', action='store_true',
+                       help='Show real-time visualization')
+    parser.add_argument('--verbose', action='store_true',
+                       help='Show detailed logs')
+    parser.add_argument('--show-vehicles', action='store_true',
+                       help='Show each vehicle arrival/departure')
+    
+    args = parser.parse_args()
+    
     print_configuration()
     
-    # Run simulation with progress indicator
-    parking_lot = run_simulation(verbose=False, show_vehicles=False)
+    # Run simulation
+    parking_lot = run_simulation(
+        verbose=args.verbose, 
+        show_vehicles=args.show_vehicles,
+        visualize=args.visualize
+    )
     
-    # Print results
-    print_results(parking_lot)
+    # Print results (skip if visualizing, as it may still be running)
+    if not args.visualize:
+        print_results(parking_lot)
     
     # Additional insights
     print("\n💡 KEY INSIGHTS:")
