@@ -1,12 +1,11 @@
 """
-GLOBAL COMPARATOR - Complete Scenario Analysis
+COMPARADOR DE LUCRO - Maximizar Revenue
 
-Compares different combinations of:
+Foca em encontrar as configurações que maximizam o lucro total.
+Compara diferentes combinações de:
 - Allocation Schemes
 - Charging Station Configurations
 - Pricing Strategies
-
-Runs multiple simulations and generates comparative analysis.
 """
 import simpy
 import random
@@ -166,67 +165,80 @@ def simulate_scenario(scheme, cs_config_name, strategy_name):
     return parking_lot
 
 
-def compare_schemes():
-    """Compare only the 4 allocation schemes"""
-    print("=" * 100)
-    print("COMPARISON: Allocation Schemes")
-    print("=" * 100)
-    
-    results = {}
-    for scheme in AllocationScheme:
-        print(f"🔄 {scheme.value.upper()}...", end=" ")
-        parking = simulate_scenario(scheme, "Near", "Competitive")
-        results[scheme.value] = parking
-        print(f"✓")
-    
-    print(f"\n{'Scheme':<15} {'EVs→CS':<10} {'EV Wait':<12} {'Revenue':<12}")
-    print("-" * 100)
-    for name, parking in results.items():
-        evs_cs = sum(cs.vehicles_served for cs in parking.charging_stations)
-        wait = parking.ev_wait_time / parking.num_ev_waits if parking.num_ev_waits > 0 else 0
-        print(f"{name:<15} {evs_cs:<10} {wait:<12.2f} ${parking.total_revenue:<10.2f}")
-
-
-def compare_pricing_strategies():
-    """Compare pricing strategies"""
+def compare_maximize_revenue():
+    """Comparação focada em MAXIMIZAR LUCRO"""
     print("\n" + "=" * 100)
-    print("COMPARISON: Pricing Strategies")
+    print("COMPARAÇÃO: MAXIMIZAR LUCRO (Revenue)")
     print("=" * 100)
     
-    results = {}
-    for strategy in config.PRICING_STRATEGIES.keys():
-        print(f"🔄 {strategy}...", end=" ")
-        parking = simulate_scenario(AllocationScheme.ON_DEMAND, "Mixed", strategy)
-        results[strategy] = parking
-        print(f"✓")
+    results = []
+    schemes = [AllocationScheme.ON_DEMAND, AllocationScheme.RESERVATION]
+    total = len(schemes) * len(config.CS_CONFIGS_COMPARISON) * len(config.PRICING_STRATEGIES)
+    counter = 0
     
-    print(f"\n{'Strategy':<15} {'EVs→CS':<10} {'Revenue':<12} {'Popular CS':<20}")
+    for scheme in schemes:
+        for cs_config_name in config.CS_CONFIGS_COMPARISON.keys():
+            for strategy in config.PRICING_STRATEGIES.keys():
+                counter += 1
+                print(f"\r🔄 Simulando [{counter}/{total}]...", end="", flush=True)
+                parking = simulate_scenario(scheme, cs_config_name, strategy)
+                
+                # Calcular métricas de revenue
+                time_hours = config.SIMULATION_TIME / 60.0
+                revenue_per_hour = parking.total_revenue / time_hours if time_hours > 0 else 0
+                ev_revenue_ratio = parking.ev_revenue / parking.total_revenue if parking.total_revenue > 0 else 0
+                
+                results.append({
+                    'scheme': scheme.value,
+                    'config': cs_config_name,
+                    'strategy': strategy,
+                    'parking': parking,
+                    'revenue': parking.total_revenue,
+                    'revenue_per_hour': revenue_per_hour,
+                    'ev_revenue_ratio': ev_revenue_ratio
+                })
+    
+    print(" ✓\n")
+    
+    # Ranking por revenue total (métrica principal)
+    ranking = sorted(results, key=lambda x: x['revenue'], reverse=True)
+    
+    print(f"\n{'#':<4} {'Scheme':<12} {'CS Config':<14} {'Strategy':<12} {'Revenue':<12} {'$/h':<10} {'EV %':<8}")
     print("-" * 100)
-    for name, parking in results.items():
-        evs_cs = sum(cs.vehicles_served for cs in parking.charging_stations)
-        popular = max(parking.charging_stations, key=lambda cs: cs.vehicles_served).name
-        print(f"{name:<15} {evs_cs:<10} ${parking.total_revenue:<10.2f} {popular:<20}")
+    
+    for i, r in enumerate(ranking[:10], 1):
+        parking = r['parking']
+        print(f"{i:<4} {r['scheme']:<12} {r['config']:<14} {r['strategy']:<12} "
+              f"${r['revenue']:<10.2f} ${r['revenue_per_hour']:<9.2f} {r['ev_revenue_ratio']*100:<7.1f}%")
+    
+    # Melhor combinação
+    print("\n" + "=" * 100)
+    best = ranking[0]
+    parking = best['parking']
+    evs_cs = sum(cs.vehicles_served for cs in parking.charging_stations)
+    adoption = (evs_cs / parking.total_evs * 100) if parking.total_evs > 0 else 0
+    
+    print(f"🏆 MELHOR PARA LUCRO: {best['scheme'].upper()} × {best['config']} × {best['strategy']}")
+    print(f"   💰 Revenue Total: ${best['revenue']:.2f}")
+    print(f"   💵 Revenue/Hora: ${best['revenue_per_hour']:.2f}")
+    print(f"   🔋 Revenue de EVs: ${parking.ev_revenue:.2f} ({best['ev_revenue_ratio']*100:.1f}%)")
+    print(f"   📊 EVs em CS: {evs_cs}/{parking.total_evs} ({adoption:.1f}%)")
+    
+    return ranking
 
 
 def main():
-    """Main menu - Comparações básicas"""
+    """Main function"""
     print("\n" + "=" * 100)
-    print("E-MOBILITY COMPARATOR - Análise de Cenários")
+    print("E-MOBILITY COMPARATOR - MAXIMIZAR LUCRO")
     print("=" * 100)
-    print("\nComparações Básicas:")
-    print("  1. Comparar Esquemas de Alocação")
-    print("  2. Comparar Estratégias de Preço")
-    print("\nPara análises específicas, use:")
-    print("  • comparator_revenue.py - Maximizar Lucro")
-    print("  • comparator_cs_usage.py - Maximizar Uso de CS")
-    print("\nExecutando comparações básicas...\n")
+    print("\nAnalisando todas as combinações para encontrar a configuração")
+    print("que maximiza o lucro total...\n")
     
-    compare_schemes()
-    compare_pricing_strategies()
+    ranking = compare_maximize_revenue()
     
     print("\n" + "=" * 100)
-    print("✅ Análise básica completa!")
-    print("   Use comparator_revenue.py ou comparator_cs_usage.py para análises específicas.")
+    print("✅ Análise completa! Use comparator_cs_usage.py para análise de uso de CS.")
     print("=" * 100)
 
 
