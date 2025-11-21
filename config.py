@@ -10,10 +10,10 @@ from models import AllocationScheme, BatteryLevel, EconomicProfile
 # GENERAL SIMULATION SETTINGS
 # ============================================================================
 
-RANDOM_SEED = 42# Seed for reproducibility
+RANDOM_SEED = 72# Seed for reproducibility
 NUM_REGULAR_SPOTS = 50# Number of regular parking spots
 SIMULATION_TIME = 480# Time in minutes (480 = 8 hours)
-ARRIVAL_INTERVAL = 5# Minutes between arrivals (average)
+ARRIVAL_INTERVAL = 3# Minutes between arrivals (average)
 PROB_EV = 0.3# Probability of vehicle being EV (30%)
 PARKING_TIME = (30, 120)           # Min and max parking duration (minutes)
 PROB_RESERVATION = 0.4# Probability of EV having reservation (40%)
@@ -29,17 +29,30 @@ ALLOCATION_SCHEME = AllocationScheme.ON_DEMAND
 # PRICES ($ per hour)
 # ============================================================================
 
-REGULAR_SPOT_PRICE = 5.0# Regular spot price
+REGULAR_SPOT_PRICE = 2.6# Regular spot price (base parking price)
+
+# Base parking price for charging stations (same as regular or can be different)
+CHARGING_STATION_PARKING_PRICE = 2.6# Base parking price per hour for CS spots
 
 # ============================================================================
 # CHARGING STATIONS
 # ============================================================================
 
-# Format: (name, distance_meters, num_spots, price_per_hour)
+# Charging options available (speed_kw, price_per_kwh, name)
+# Based on Portugal pricing: Normal charging up to €0.43/kWh, Fast charging up to €0.79/kWh
+# Note: Price is ONLY for charging, NO parking fee included
+CHARGING_OPTIONS = {
+    "Normal": (7.0, 0.43, "Normal"),      # 7kW × €0.43/kWh = €3.01/h (charging only)
+    "Fast": (22.0, 0.43, "Fast"),         # 22kW × €0.43/kWh = €9.46/h (charging only)
+    "Ultra-fast": (50.0, 0.79, "Ultra-fast"),  # 50kW × €0.79/kWh = €39.50/h (charging only)
+}
+
+# Format: (name, distance_meters, num_spots, [list of available charging option names])
+# Each station can offer multiple charging speeds - vehicles choose based on their economic profile
 CHARGING_STATIONS_CONFIG = [
-    ("CS-Near", 30, 3, 12.0),
-    ("CS-Mid", 80, 4, 8.0),
-    ("CS-Far", 150, 3, 6.0),
+    ("CS-Near", 30, 3, ["Normal", "Fast", "Ultra-fast"]),   # All options available
+    ("CS-Mid", 80, 4, ["Normal", "Fast", "Ultra-fast"]),    # All options available
+    ("CS-Far", 150, 3, ["Normal", "Fast", "Ultra-fast"]),   # All options available
 ]
 
 # ============================================================================
@@ -55,11 +68,13 @@ DISTANCE_TOLERANCE_BY_BATTERY = {
 }
 
 # Price tolerance by battery level (% over regular spot price)
+# Note: Since charging is an additional service (not parking fee), these tolerances
+# apply to the charging price itself. Higher battery = less willing to pay for charging.
 PRICE_TOLERANCE_BY_BATTERY = {
-    BatteryLevel.CRITICAL: 300,   # Accepts up to 3x the price
+    BatteryLevel.CRITICAL: 300,   # Accepts up to 3x the regular spot price for charging
     BatteryLevel.LOW: 200,        # Accepts up to 2x
     BatteryLevel.MEDIUM: 150,     # Accepts up to 1.5x
-    BatteryLevel.HIGH: 120,       # Accepts up to 1.2x
+    BatteryLevel.HIGH: 200,      # Accepts up to 2x (increased from 120% to allow Normal charging at €3.01)
 }
 
 # Tolerance multiplier by economic profile
@@ -90,9 +105,11 @@ CS_CONFIGS_COMPARISON = {
     ],
 }
 
-# Pricing strategies (function returns price based on distance)
+# Pricing strategies (function returns tuple: (charging_speed_kw, price_per_kwh))
+# Note: Distance no longer affects price, only customer tolerance
 PRICING_STRATEGIES = {
-    "Premium": lambda dist: 12.0 if dist <= 50 else (8.0 if dist <= 100 else 6.0),
-    "Competitive": lambda dist: 7.0 if dist <= 50 else (6.0 if dist <= 100 else 5.5),
-    "Uniform": lambda dist: 8.0,  # Single price for all CS
+    "Premium": lambda dist: (50.0, 0.79),      # Ultra-fast: 50kW × €0.79/kWh
+    "Competitive": lambda dist: (22.0, 0.43),  # Fast: 22kW × €0.43/kWh
+    "Normal": lambda dist: (7.0, 0.43),        # Normal: 7kW × €0.43/kWh
+    "Uniform": lambda dist: (22.0, 0.43),      # Uniform fast charging for all
 }

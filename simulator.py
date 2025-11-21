@@ -21,6 +21,7 @@ from models import (
     BatteryLevel,
     EconomicProfile,
     ChargingStation,
+    ChargingOption,
     generate_battery_level,
     generate_economic_profile
 )
@@ -37,14 +38,25 @@ class ParkingLot:
         self.regular_spots = simpy.Resource(env, capacity=NUM_REGULAR_SPOTS)
         self.regular_price = REGULAR_SPOT_PRICE
         
-        # Create charging stations
+        # Create charging stations with multiple charging options
         self.charging_stations: List[ChargingStation] = []
-        for i, (name, distance, num_spots, price) in enumerate(CHARGING_STATIONS_CONFIG):
+        for i, (name, distance, num_spots, option_names) in enumerate(CHARGING_STATIONS_CONFIG):
+            # Create charging options for this station
+            options = [
+                ChargingOption(
+                    speed_kw=CHARGING_OPTIONS[opt_name][0],
+                    price_per_kwh=CHARGING_OPTIONS[opt_name][1],
+                    name=CHARGING_OPTIONS[opt_name][2]
+                )
+                for opt_name in option_names
+            ]
+            
             cs = ChargingStation(
                 id=i, name=name,
                 distance_from_entrance=distance,
                 num_spots=num_spots,
-                price_per_hour=price,
+                charging_options=options,
+                parking_price_per_hour=CHARGING_STATION_PARKING_PRICE,
                 resource=simpy.Resource(env, capacity=num_spots),
                 resource_priority=simpy.PriorityResource(env, capacity=num_spots)
             )
@@ -72,36 +84,75 @@ class ParkingLot:
         self.ev_revenue = 0.0
     
     def choose_charging_station(self, battery_level, economic_profile):
-        """Choose best CS based on distance, battery and price"""
+        """
+        Choose best CS and charging option based on distance, battery, price, and economic profile
+        
+        Returns: (ChargingStation, ChargingOption) or (None, None)
+        
+        Note: Charging price is compared to regular spot price, but since charging is an
+        additional service, we allow it to be more expensive than regular parking.
+        """
         max_distance = DISTANCE_TOLERANCE_BY_BATTERY[battery_level]
         price_tolerance_battery = PRICE_TOLERANCE_BY_BATTERY[battery_level]
         price_tolerance_profile = PRICE_TOLERANCE_BY_PROFILE[economic_profile]
         final_price_tolerance = price_tolerance_battery * price_tolerance_profile
+        # Max price is based on regular spot, but charging is an additional service
+        # So we compare charging price directly (not parking + charging)
         max_price = REGULAR_SPOT_PRICE * (final_price_tolerance / 100)
+        
+        best_station = None
+        best_option = None
+        best_score = float('-inf')  # Initialize with negative infinity so any score will be better
         
         for cs in self.charging_stations:
             if cs.distance_from_entrance > max_distance:
                 cs.distance_rejections += 1
                 continue
-            if cs.price_per_hour > max_price:
+            
+            # Choose charging option based on economic profile
+            if economic_profile == EconomicProfile.BUDGET:
+                # BUDGET: Choose cheapest option (Normal)
+                option = cs.get_cheapest_option()
+            elif economic_profile == EconomicProfile.PREMIUM:
+                # PREMIUM: Choose fastest affordable option (Ultra-fast if possible)
+                option = cs.get_best_option(max_price)
+            else:  # MODERATE
+                # MODERATE: Choose best balance (Fast if affordable, else Normal)
+                option = cs.get_best_option(max_price)
+                if option is None:
+                    option = cs.get_cheapest_option()
+            
+            if option is None:
+                cs.price_rejections += 1
+                continue
+            
+            option_price = option.calculate_price_per_hour()
+            if option_price > max_price:
                 cs.price_rejections += 1
                 continue
             
             resource = cs.resource_priority if self.scheme == AllocationScheme.RESERVATION else cs.resource
             if resource.count < resource.capacity or len(resource.queue) < 2:
-                return cs
+                # Score: prefer closer stations and faster charging (if affordable)
+                score = -cs.distance_from_entrance + (option.speed_kw * 0.1)
+                if score > best_score:
+                    best_score = score
+                    best_station = cs
+                    best_option = option
         
-        return None
+        return (best_station, best_option) if best_station else (None, None)
     
     def print_status(self):
         """Print current status"""
         print(f"\n[Time {self.env.now:.0f}min] Status:")
-        print(f"  Regular spots (${self.regular_price:.2f}/h): {self.regular_spots.count}/{self.regular_spots.capacity}")
+        print(f"  Regular spots (€{self.regular_price:.2f}/h): {self.regular_spots.count}/{self.regular_spots.capacity}")
         print(f"  Charging Stations:")
         for cs in self.charging_stations:
             resource = cs.resource_priority if self.scheme == AllocationScheme.RESERVATION else cs.resource
-            print(f"    {cs.name} ({cs.distance_from_entrance}m, ${cs.price_per_hour:.2f}/h): "
-                  f"{resource.count}/{cs.num_spots} occupied, queue: {len(resource.queue)}")
+            options_str = ", ".join([f"{opt.name} (€{opt.calculate_price_per_hour():.2f}/h)" 
+                                     for opt in cs.charging_options])
+            print(f"    {cs.name} ({cs.distance_from_entrance}m): {resource.count}/{cs.num_spots} occupied, queue: {len(resource.queue)}")
+            print(f"      Options: {options_str}")
 
 
 def vehicle_process(env, name, parking_lot, is_ev, battery_level=None, economic_profile=None, has_reservation=False):
@@ -110,6 +161,7 @@ def vehicle_process(env, name, parking_lot, is_ev, battery_level=None, economic_
     scheme = parking_lot.scheme
     spot = None
     charging_station = None
+    charging_option = None
     use_priority = False
     priority = 1
     chosen_price = parking_lot.regular_price
@@ -130,29 +182,31 @@ def vehicle_process(env, name, parking_lot, is_ev, battery_level=None, economic_
         })
     
     if is_ev and battery_level and economic_profile:
-        # EV decision logic
-        charging_station = parking_lot.choose_charging_station(battery_level, economic_profile)
+        # EV decision logic - returns (station, option)
+        charging_station, charging_option = parking_lot.choose_charging_station(battery_level, economic_profile)
         
         if scheme == AllocationScheme.ON_DEMAND:
             # ON_DEMAND: Tries CS, can use regular
-            if charging_station:
+            if charging_station and charging_option:
                 spot = charging_station.resource
-                chosen_price = charging_station.price_per_hour
+                chosen_price = charging_option.calculate_price_per_hour()
             else:
                 spot = parking_lot.regular_spots
                 charging_station = None
+                charging_option = None
                 parking_lot.evs_chose_regular_battery_ok += 1
         
         elif scheme == AllocationScheme.RESERVATION:
             # RESERVATION: With priority
-            if charging_station:
+            if charging_station and charging_option:
                 spot = charging_station.resource_priority
                 use_priority = True
                 priority = 0 if has_reservation else 1
-                chosen_price = charging_station.price_per_hour
+                chosen_price = charging_option.calculate_price_per_hour()
             else:
                 spot = parking_lot.regular_spots
                 charging_station = None
+                charging_option = None
                 parking_lot.evs_chose_regular_battery_ok += 1
     
     else:
@@ -164,26 +218,30 @@ def vehicle_process(env, name, parking_lot, is_ev, battery_level=None, economic_
         if use_priority:
             with spot.request(priority=priority) as request:
                 yield request
-                yield from process_stay(env, name, parking_lot, is_ev, arrival, chosen_price, charging_station)
+                yield from process_stay(env, name, parking_lot, is_ev, arrival, chosen_price, charging_station, charging_option)
         else:
             with spot.request() as request:
                 yield request
-                yield from process_stay(env, name, parking_lot, is_ev, arrival, chosen_price, charging_station)
+                yield from process_stay(env, name, parking_lot, is_ev, arrival, chosen_price, charging_station, charging_option)
     except simpy.Interrupt:
         pass
 
 
-def process_stay(env, vehicle_name, parking_lot, is_ev, arrival, chosen_price, charging_station):
+def process_stay(env, vehicle_name, parking_lot, is_ev, arrival, chosen_price, charging_station, charging_option=None):
     """Process parking duration and statistics"""
     wait_time = env.now - arrival
     parking_lot.total_wait_time += wait_time
     
     # Print parking action
-    spot_name = charging_station.name if charging_station else "Regular"
-    if wait_time > 0:
-        print(f"[{env.now:6.1f}min]          → Parked at {spot_name:12s} (${chosen_price:.2f}/h) [waited {wait_time:.1f}min]")
+    if charging_station and charging_option:
+        spot_name = f"{charging_station.name} ({charging_option.name})"
     else:
-        print(f"[{env.now:6.1f}min]          → Parked at {spot_name:12s} (${chosen_price:.2f}/h)")
+        spot_name = "Regular"
+    
+    if wait_time > 0:
+        print(f"[{env.now:6.1f}min]          → Parked at {spot_name:20s} (€{chosen_price:.2f}/h) [waited {wait_time:.1f}min]")
+    else:
+        print(f"[{env.now:6.1f}min]          → Parked at {spot_name:20s} (€{chosen_price:.2f}/h)")
     
     # Notify visualizer
     if parking_lot.visualizer:
@@ -290,8 +348,15 @@ def print_configuration():
     
     total_ev_spots = sum(spots for _, _, spots, _ in CHARGING_STATIONS_CONFIG)
     print(f"\n  🔌 Charging Stations (Total: {total_ev_spots} EV spots):")
-    for name, dist, spots, price in CHARGING_STATIONS_CONFIG:
-        print(f"    • {name:12s}: {spots} spots at {dist:3.0f}m from entrance, ${price:5.2f}/h")
+    for name, dist, spots, option_names in CHARGING_STATIONS_CONFIG:
+        options_info = []
+        for opt_name in option_names:
+            speed_kw, price_kwh, opt_display = CHARGING_OPTIONS[opt_name]
+            charging_price = speed_kw * price_kwh
+            options_info.append(f"{opt_display} ({speed_kw}kW @ €{price_kwh:.2f}/kWh = €{charging_price:.2f}/h)")
+        print(f"    • {name:12s}: {spots} spots at {dist:3.0f}m")
+        for opt_info in options_info:
+            print(f"      - {opt_info}")
     
     print(f"\n  📊 Simulation Parameters:")
     print(f"    • Duration: {SIMULATION_TIME}min ({SIMULATION_TIME/60:.1f} hours)")
@@ -354,7 +419,8 @@ def print_results(parking_lot):
         # Usage assessment
         usage_status = "🟢 Good" if 60 <= usage_rate <= 80 else ("🟡 Low" if usage_rate < 60 else "🔴 High")
         
-        print(f"\n  {i}. {cs.name} ({cs.distance_from_entrance:.0f}m from entrance, ${cs.price_per_hour:.2f}/h):")
+        options_range = f"€{cs.get_cheapest_option().calculate_price_per_hour():.2f}-€{cs.get_fastest_option().calculate_price_per_hour():.2f}/h"
+        print(f"\n  {i}. {cs.name} ({cs.distance_from_entrance:.0f}m from entrance, {options_range}):")
         print(f"     Vehicles served: {cs.vehicles_served}")
         print(f"     Utilization: {usage_rate:.1f}% {usage_status}")
         print(f"     Revenue: ${cs.total_revenue:.2f}")

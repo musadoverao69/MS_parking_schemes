@@ -324,10 +324,16 @@ class ParkingLotVisualizerPygame:
         name_text = self.font.render(cs.name, True, WHITE)
         self.screen.blit(name_text, (x, label_y))
         
-        # Informações
+        # Informações - mostra range de preços
         info_y = y + self.spot_height + 5
+        cheapest = cs.get_cheapest_option().calculate_price_per_hour()
+        fastest = cs.get_fastest_option().calculate_price_per_hour()
+        if cheapest == fastest:
+            price_str = f"€{cheapest:.2f}/h"
+        else:
+            price_str = f"€{cheapest:.2f}-€{fastest:.2f}/h"
         info_text = self.small_font.render(
-            f"{cs.distance_from_entrance}m | ${cs.price_per_hour:.1f}/h", 
+            f"{cs.distance_from_entrance}m | {price_str}", 
             True, LIGHT_GRAY
         )
         self.screen.blit(info_text, (x, info_y))

@@ -33,10 +33,13 @@ class ParkingLotComparison:
         self.regular_price = config.REGULAR_SPOT_PRICE
         
         self.charging_stations: List[ChargingStation] = []
-        for i, (name, distance, num_spots, price) in enumerate(cs_config):
+        for i, (name, distance, num_spots, charging_speed_kw, price_per_kwh) in enumerate(cs_config):
             cs = ChargingStation(
                 id=i, name=name, distance_from_entrance=distance,
-                num_spots=num_spots, price_per_hour=price,
+                num_spots=num_spots,
+                charging_speed_kw=charging_speed_kw,
+                price_per_kwh=price_per_kwh,
+                parking_price_per_hour=config.CHARGING_STATION_PARKING_PRICE,
                 resource=simpy.Resource(env, capacity=num_spots),
                 resource_priority=simpy.PriorityResource(env, capacity=num_spots)
             )
@@ -154,10 +157,10 @@ def simulate_scenario(scheme, cs_config_name, strategy_name):
     random.seed(config.RANDOM_SEED)
     env = simpy.Environment()
     
-    # Create config with prices
+    # Create config with prices (strategy returns (charging_speed_kw, price_per_kwh))
     base_config = config.CS_CONFIGS_COMPARISON[cs_config_name]
     strategy = config.PRICING_STRATEGIES[strategy_name]
-    cs_config = [(name, dist, spots, strategy(dist)) for name, dist, spots in base_config]
+    cs_config = [(name, dist, spots, *strategy(dist)) for name, dist, spots in base_config]
     
     parking_lot = ParkingLotComparison(env, cs_config, scheme)
     env.process(vehicle_generator_quick(env, parking_lot))
