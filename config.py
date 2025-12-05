@@ -13,9 +13,9 @@ from models import AllocationScheme, BatteryLevel, EconomicProfile
 RANDOM_SEED = 72# Seed for reproducibility
 NUM_REGULAR_SPOTS = 50# Number of regular parking spots
 SIMULATION_TIME = 480# Time in minutes (480 = 8 hours)
-ARRIVAL_INTERVAL = 3# Minutes between arrivals (average)
+ARRIVAL_INTERVAL = 2# Minutes between arrivals (average)
 PROB_EV = 0.3# Probability of vehicle being EV (30%)
-PARKING_TIME = (30, 120)           # Min and max parking duration (minutes)
+PARKING_TIME = (30, 120)# Min and max parking duration (minutes)
 PROB_RESERVATION = 0.4# Probability of EV having reservation (40%)
 
 # ============================================================================
@@ -62,8 +62,8 @@ CHARGING_STATIONS_CONFIG = [
 # Maximum acceptable distance by battery level (meters)
 DISTANCE_TOLERANCE_BY_BATTERY = {
     BatteryLevel.CRITICAL: 200,  # Accepts any distance
-    BatteryLevel.LOW: 120,       # Accepts up to 120m
-    BatteryLevel.MEDIUM: 80,     # Prefers up to 80m
+    BatteryLevel.LOW: 150,       # Accepts up to 150m
+    BatteryLevel.MEDIUM: 100,     # Prefers up to 100m
     BatteryLevel.HIGH: 50,       # Only accepts very close
 }
 
@@ -73,8 +73,8 @@ DISTANCE_TOLERANCE_BY_BATTERY = {
 PRICE_TOLERANCE_BY_BATTERY = {
     BatteryLevel.CRITICAL: 300,   # Accepts up to 3x the regular spot price for charging
     BatteryLevel.LOW: 200,        # Accepts up to 2x
-    BatteryLevel.MEDIUM: 150,     # Accepts up to 1.5x
-    BatteryLevel.HIGH: 200,      # Accepts up to 2x (increased from 120% to allow Normal charging at €3.01)
+    BatteryLevel.MEDIUM: 120,     # Accepts up to 1.2x
+    BatteryLevel.HIGH: 180,      # Accepts up to 1.8x (increased from 120% to allow Normal charging at €3.01)
 }
 
 # Tolerance multiplier by economic profile
