@@ -11,11 +11,11 @@ from models import AllocationScheme, BatteryLevel, EconomicProfile
 # ============================================================================
 
 RANDOM_SEED = 72# Seed for reproducibility
-NUM_REGULAR_SPOTS = 50# Number of regular parking spots
+NUM_REGULAR_SPOTS = 60# Number of regular parking spots
 SIMULATION_TIME = 480# Time in minutes (480 = 8 hours)
 ARRIVAL_INTERVAL = 2# Minutes between arrivals (average)
 PROB_EV = 0.3# Probability of vehicle being EV (30%)
-PARKING_TIME = (30, 120)# Min and max parking duration (minutes)
+PARKING_TIME = (30, 180)# Min and max parking duration (minutes)
 PROB_RESERVATION = 0.4# Probability of EV having reservation (40%)
 
 # ============================================================================
@@ -71,10 +71,10 @@ DISTANCE_TOLERANCE_BY_BATTERY = {
 # Note: Since charging is an additional service (not parking fee), these tolerances
 # apply to the charging price itself. Higher battery = less willing to pay for charging.
 PRICE_TOLERANCE_BY_BATTERY = {
-    BatteryLevel.CRITICAL: 300,   # Accepts up to 3x the regular spot price for charging
-    BatteryLevel.LOW: 200,        # Accepts up to 2x
-    BatteryLevel.MEDIUM: 120,     # Accepts up to 1.2x
-    BatteryLevel.HIGH: 180,      # Accepts up to 1.8x (increased from 120% to allow Normal charging at €3.01)
+    BatteryLevel.CRITICAL: 200,   # Accepts up to 2x the regular spot price for charging
+    BatteryLevel.LOW: 150,        # Accepts up to 1.5x
+    BatteryLevel.MEDIUM: 100,     # Accepts up to 1x
+    BatteryLevel.HIGH: 150,      # Accepts up to 1.5x (increased from 120% to allow Normal charging at €3.01)
 }
 
 # Tolerance multiplier by economic profile
