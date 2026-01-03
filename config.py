@@ -11,9 +11,9 @@ from models import AllocationScheme, BatteryLevel, EconomicProfile
 # ============================================================================
 
 RANDOM_SEED = 42# Seed for reproducibility
-NUM_REGULAR_SPOTS = 50# Number of regular parking spots
+NUM_REGULAR_SPOTS = 20# Number of regular parking spots
 SIMULATION_TIME = 480# Time in minutes (480 = 8 hours)
-ARRIVAL_INTERVAL = 5# Minutes between arrivals (average)
+ARRIVAL_INTERVAL = 10# Minutes between arrivals (average)
 PROB_EV = 0.3# Probability of vehicle being EV (30%)
 PARKING_TIME = (30, 120)           # Min and max parking duration (minutes)
 PROB_RESERVATION = 0.4# Probability of EV having reservation (40%)

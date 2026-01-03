@@ -1,10 +1,11 @@
 """
 Visualizador Pygame para Parking Lot Simulation
 
-Visualização estilo highway-env com vista de cima:
-- Layout organizado com linhas delimitando vagas
-- Quadradinhos representando carros
-- Estações de carregamento claramente definidas
+Visualização com vista lateral:
+- Carros entram pela esquerda
+- Estrada horizontal no centro
+- Vagas perpendiculares acima e abaixo da estrada
+- Carros viram 90° para estacionar
 """
 import pygame
 import math
@@ -30,7 +31,7 @@ RED = (255, 0, 0)
 YELLOW = (255, 255, 0)
 ORANGE = (255, 165, 0)
 LIGHT_BLUE = (173, 216, 230)
-PARKING_GRAY = (40, 40, 40)  # Cor do asfalto
+PARKING_GRAY = (40, 40, 40)
 
 
 class VehicleState(Enum):
@@ -54,11 +55,11 @@ class VehicleVisual:
     target_x: float = 0
     target_y: float = 0
     speed: float = 2.0
-    angle: float = 0  # Rotação do veículo
+    angle: float = 0
 
 
 class ParkingLotVisualizerPygame:
-    """Visualizador do parking lot usando Pygame - Vista de cima"""
+    """Visualizador do parking lot usando Pygame - Vista lateral"""
     
     def __init__(self, parking_lot, config):
         self.parking_lot = parking_lot
@@ -72,32 +73,29 @@ class ParkingLotVisualizerPygame:
         self.vehicles: Dict[str, VehicleVisual] = {}
         
         # Rastreamento de vagas ocupadas
-        self.occupied_regular_spots: Dict[tuple, str] = {}  # {(row, col): vehicle_id}
-        self.occupied_cs_spots: Dict[tuple, str] = {}  # {(cs_name, spot_index): vehicle_id}
+        self.occupied_regular_spots: Dict[tuple, str] = {}
+        self.occupied_cs_spots: Dict[tuple, str] = {}
         
-        # Configuração Pygame
+        # Configuração Pygame - LAYOUT LATERAL
         self.width = 1400
         self.height = 800
-        self.spot_width = 35
-        self.spot_height = 60
+        self.spot_width = 50 
+        self.spot_height = 100
         self.spot_spacing = 3
-        self.corridor_width = 80  # Largura do corredor entre fileiras
+        self.road_width = 100
         
-        # Calcular posições centralizadas
-        num_spots_per_row = self.config['NUM_REGULAR_SPOTS'] // 2
-        total_parking_width = num_spots_per_row * (self.spot_width + self.spot_spacing)
+        # Estrada horizontal no centro
+        self.road_y = self.height // 2 - self.road_width // 2
         
-        # Centralizar estacionamento (considerando painel de 280px)
-        available_width = self.width - 280  # Largura disponível (sem painel)
-        self.parking_start_x = (available_width // 2) - total_parking_width // 2
-        self.parking_start_y = 150
+        # Calcular posições das vagas ao longo da estrada
+        num_spots_per_side = self.config['NUM_REGULAR_SPOTS'] // 2
+        self.parking_start_x = 150
         
-        # SHOP centralizado com o estacionamento (não com a tela)
-        self.shop_width = 200
-        self.shop_height = 60
-        parking_center_x = self.parking_start_x + total_parking_width // 2
-        self.shop_x = parking_center_x - self.shop_width // 2
-        self.shop_y = 30
+        # SHOP no lado direito (destino)
+        self.shop_width = 350
+        self.shop_height = 100
+        self.shop_x = self.width - 280 - self.shop_width - 50
+        self.shop_y = 675
         
         # Inicializar Pygame
         pygame.init()
@@ -111,241 +109,73 @@ class ParkingLotVisualizerPygame:
         # Estado da simulação
         self.paused = False
         self.speed = 1.0
-        
-        # Calcular posições das estações
-        self.setup_station_positions()
-    
-    def setup_station_positions(self):
-        """Calcula posições das estações de carregamento (na mesma linha do SHOP, sem sobrepor)"""
         self.station_positions = {}
-        
-        # Posicionar estações à direita do SHOP (sem sobrepor)
-        spacing_between = 25  # Reduzir espaçamento para caber mais estações
-        start_x = self.shop_x + self.shop_width + spacing_between
-        
-        # Verificar limite do painel
-        panel_start_x = self.width - 280
-        max_station_x = panel_start_x - 30  # Margem maior
-        
-        # Calcular largura total necessária
-        total_width_needed = sum(
-            cs.num_spots * (self.spot_width + self.spot_spacing) - self.spot_spacing
-            for cs in self.parking_lot.charging_stations
-        )
-        total_spacing = spacing_between * (len(self.parking_lot.charging_stations) - 1)
-        total_needed = total_width_needed + total_spacing
-        available_space = max_station_x - start_x
-        
-        # Se não couber, reduzir espaçamento
-        if total_needed > available_space and len(self.parking_lot.charging_stations) > 1:
-            spacing_between = max(15, (available_space - total_width_needed) // (len(self.parking_lot.charging_stations) - 1))
-        
-        # Posicionar cada estação sequencialmente à direita do SHOP
-        current_x = start_x
-        for cs in self.parking_lot.charging_stations:
-            station_width = cs.num_spots * (self.spot_width + self.spot_spacing) - self.spot_spacing
-            
-            # Verificar se cabe antes do painel
-            if current_x + station_width > max_station_x:
-                # Ajustar para caber (colocar o mais próximo possível)
-                x = max(start_x, max_station_x - station_width - 10)
-            else:
-                x = current_x
-            
-            # Mesma altura do SHOP
-            y = self.shop_y
-            
-            # SEMPRE adicionar ao dicionário (mesmo que não caiba perfeitamente)
-            self.station_positions[cs.name] = {
-                'x': x,
-                'y': y,
-                'width': station_width,
-                'height': self.spot_height
+
+    def draw_spot(self, x, y, side):   
+        if side == 'top':
+            pygame.draw.line(self.screen, (255, 255, 255), (x - 3*self.spot_width/4, y - self.spot_height/2), (x + 3*self.spot_width/4,  y - self.spot_height/2), 2)
+            pygame.draw.line(self.screen, (255, 255, 255), (x - 3*self.spot_width/4, y - self.spot_height/2), (x - 3*self.spot_width/4, y + self.spot_height/2), 2)
+            pygame.draw.line(self.screen, (255, 255, 255), (x + 3*self.spot_width/4, y - self.spot_height/2), (x + 3*self.spot_width/4, y + self.spot_height/2), 2)
+        elif side == 'bottom':
+            pygame.draw.line(self.screen, (255, 255, 255), (x - 3*self.spot_width/4, y + self.spot_height/2), (x + 3*self.spot_width/4,  y + self.spot_height/2), 2)
+            pygame.draw.line(self.screen, (255, 255, 255), (x - 3*self.spot_width/4, y + self.spot_height/2), (x - 3*self.spot_width/4, y - self.spot_height/2), 2)
+            pygame.draw.line(self.screen, (255, 255, 255), (x + 3*self.spot_width/4, y + self.spot_height/2), (x + 3*self.spot_width/4, y - self.spot_height/2), 2)
+
+
+    def draw_parking_spots(self,inital_x, initial_y, num_spots, side,type):
+        for i in range(num_spots):
+            self.draw_spot(inital_x + i * 2 * (3*self.spot_width/4), initial_y, side)
+
+        if type == 'regular':
+            pass
+        elif type == 'CS-Mid':
+            self.station_positions['CS-Mid'] = {
+            'x': inital_x,                
+            'y': initial_y}
+        elif type == 'CS-Near':
+            self.station_positions['CS-Near'] = {
+            'x': 200 - 50,                
+            'y': 700 + 50,                
+            'width': self.spot_width * 3,
+            'height': self.spot_height - 60
             }
-            
-            # Próxima estação
-            current_x += station_width + spacing_between
+        elif type == 'CS-Far':
+            self.station_positions['CS-Far'] = {
+            'x': 1200 - 50,               
+            'y': 300 + 50,                
+            'width': self.spot_width * 3, 
+            'height': self.spot_height - 60
+            }
     
-    def draw_parking_spot(self, x, y, occupied=False, is_ev_spot=False):
-        """Desenha uma vaga de estacionamento (estilo da imagem - apenas linhas)"""
-        # Na imagem, as vagas são delimitadas apenas por linhas brancas
-        # Não preenchemos o fundo (já é o asfalto escuro)
+    def draw_road_lines(self, length,y,height):
+        gap = 80
+        for i in range(length // gap):
+            pygame.draw.line(self.screen, YELLOW, (i * gap + 20, y+height//2), (i * gap + 40, y+height//2), 5)
+
+    def draw_road(self,y,width,height):
+        pygame.draw.rect(self.screen, DARK_GRAY, (0, y, self.width, height))
+        self.draw_road_lines(self.width,y,height)
+
+    def draw_sign(self,x,y,size,color,text_color,text):
+        # Draw two sticks (poles) supporting the sign
+        pygame.draw.line(self.screen, BLACK, (x + 20, y+size/2), (x + 20, y + size/2 + 30), 4)
+        pygame.draw.line(self.screen, BLACK, (x+size - 25, y+size/2), (x + size - 25, y + size/2 + 30), 4)
+        pygame.draw.rect(self.screen, color, (x,y, size, size/2))
+        font = self.font
+        text_surface = font.render(text, True, text_color)
+        text_rect = text_surface.get_rect(center=(x + size/2, y + (size/2)/2))
+
+        self.screen.blit(text_surface, text_rect)
+
+    def draw_parking_lot(self):
+        # Draw Road
+        #self.draw_road(500,self.width,self.road_width)
         
-        # Linhas brancas delimitando a vaga
-        # Linha superior
-        pygame.draw.line(
-            self.screen, WHITE,
-            (x, y),
-            (x + self.spot_width, y),
-            2
-        )
-        # Linha inferior
-        pygame.draw.line(
-            self.screen, WHITE,
-            (x, y + self.spot_height),
-            (x + self.spot_width, y + self.spot_height),
-            2
-        )
-        # Linha esquerda
-        pygame.draw.line(
-            self.screen, WHITE,
-            (x, y),
-            (x, y + self.spot_height),
-            2
-        )
-        # Linha direita
-        pygame.draw.line(
-            self.screen, WHITE,
-            (x + self.spot_width, y),
-            (x + self.spot_width, y + self.spot_height),
-            2
-        )
-    
-    def draw_regular_parking_area(self):
-        """Desenha a área de vagas regulares - duas fileiras principais (estilo da imagem)"""
-        # Duas fileiras principais (como na imagem)
-        num_rows = 2
-        spots_per_row = self.config['NUM_REGULAR_SPOTS'] // num_rows
-        
-        start_x = self.parking_start_x
-        top_row_y = self.parking_start_y
-        bottom_row_y = self.parking_start_y + self.spot_height + self.corridor_width
-        
-        # Fileira superior: linha horizontal longa com linhas verticais descendo
-        line_start_x = start_x
-        line_end_x = start_x + spots_per_row * (self.spot_width + self.spot_spacing)
-        line_y = top_row_y
-        
-        # Linha horizontal superior (contínua)
-        pygame.draw.line(
-            self.screen, WHITE,
-            (line_start_x, line_y),
-            (line_end_x, line_y),
-            2
-        )
-        
-        # Linhas verticais descendo (delimitando cada vaga)
-        for col in range(spots_per_row + 1):
-            x = start_x + col * (self.spot_width + self.spot_spacing)
-            pygame.draw.line(
-                self.screen, WHITE,
-                (x, line_y),
-                (x, line_y + self.spot_height),
-                2
-            )
-        
-        # Verificar ocupação e desenhar carros na fileira superior
-        for col in range(spots_per_row):
-            x = start_x + col * (self.spot_width + self.spot_spacing)
-            y = top_row_y
-            
-            # Verificar se está ocupado
-            occupied = False
-            for vehicle in self.vehicles.values():
-                if (vehicle.state == VehicleState.PARKED and 
-                    vehicle.spot_name == "Regular" and
-                    abs(vehicle.x - (x + self.spot_width // 2)) < self.spot_width // 2 and
-                    abs(vehicle.y - (y + self.spot_height // 2)) < self.spot_height // 2):
-                    occupied = True
-                    break
-        
-        # Corredor entre as fileiras
-        corridor_rect = pygame.Rect(
-            start_x - 20,
-            top_row_y + self.spot_height,
-            spots_per_row * (self.spot_width + self.spot_spacing) + 40,
-            self.corridor_width
-        )
-        
-        # Seta no corredor (apontando para a esquerda)
-        arrow_x = corridor_rect.centerx - 30
-        arrow_y = corridor_rect.centery
-        arrow_points = [
-            (arrow_x, arrow_y),
-            (arrow_x + 20, arrow_y - 10),
-            (arrow_x + 20, arrow_y + 10)
-        ]
-        pygame.draw.polygon(self.screen, WHITE, arrow_points)
-        
-        # Fileira inferior: linha horizontal longa com linhas verticais subindo
-        bottom_line_y = bottom_row_y + self.spot_height
-        
-        # Linha horizontal inferior (contínua)
-        pygame.draw.line(
-            self.screen, WHITE,
-            (line_start_x, bottom_line_y),
-            (line_end_x, bottom_line_y),
-            2
-        )
-        
-        # Linhas verticais subindo (delimitando cada vaga)
-        for col in range(spots_per_row + 1):
-            x = start_x + col * (self.spot_width + self.spot_spacing)
-            pygame.draw.line(
-                self.screen, WHITE,
-                (x, bottom_row_y),
-                (x, bottom_line_y),
-                2
-            )
-        
-        # Verificar ocupação e desenhar carros na fileira inferior
-        for col in range(spots_per_row):
-            x = start_x + col * (self.spot_width + self.spot_spacing)
-            y = bottom_row_y
-            
-            # Verificar se está ocupado
-            occupied = False
-            for vehicle in self.vehicles.values():
-                if (vehicle.state == VehicleState.PARKED and 
-                    vehicle.spot_name == "Regular" and
-                    abs(vehicle.x - (x + self.spot_width // 2)) < self.spot_width // 2 and
-                    abs(vehicle.y - (y + self.spot_height // 2)) < self.spot_height // 2):
-                    occupied = True
-                    break
-    
-    def draw_charging_station(self, cs):
-        """Desenha uma estação de carregamento"""
-        # Verificar se a estação está no dicionário
-        if cs.name not in self.station_positions:
-            return  # Pular se não foi posicionada
-        
-        pos = self.station_positions[cs.name]
-        x = pos['x']
-        y = pos['y']
-        
-        # Desenhar vagas da estação
-        for i in range(cs.num_spots):
-            spot_x = x + i * (self.spot_width + self.spot_spacing)
-            occupied = i < cs.resource.count
-            self.draw_parking_spot(spot_x, y, occupied, is_ev_spot=True)
-        
-        # Label da estação
-        label_y = y - 25
-        name_text = self.font.render(cs.name, True, WHITE)
-        self.screen.blit(name_text, (x, label_y))
-        
-        # Informações
-        info_y = y + self.spot_height + 5
-        info_text = self.small_font.render(
-            f"{cs.distance_from_entrance}m | ${cs.price_per_hour:.1f}/h", 
-            True, LIGHT_GRAY
-        )
-        self.screen.blit(info_text, (x, info_y))
-    
-    def draw_entrance(self):
-        """Desenha a entrada do shopping (SHOP centralizado com o estacionamento)"""
-        # Desenhar retângulo arredondado (simulado com retângulo normal)
-        shop_rect = pygame.Rect(self.shop_x, self.shop_y, self.shop_width, self.shop_height)
-        pygame.draw.rect(self.screen, WHITE, shop_rect, 3)  # Apenas borda
-        
-        # Texto "SHOP"
-        shop_text = self.title_font.render("SHOP", True, WHITE)
-        shop_text_rect = shop_text.get_rect(center=(self.shop_x + self.shop_width // 2, self.shop_y + self.shop_height // 2))
-        self.screen.blit(shop_text, shop_text_rect)
-        
-        # Pequeno bloco amarelo abaixo do SHOP (entrada)
-        entrance_block = pygame.Rect(self.shop_x + self.shop_width // 2 - 10, self.shop_y + self.shop_height, 20, 15)
-        pygame.draw.rect(self.screen, YELLOW, entrance_block)
+        # Draw Parking Spots
+        #self.draw_parking_spots(100,100,10,'top','regular')
+
+        #Draw Charging Stations
+        self.draw_parking_spots(700,300,3,'top','CS-Mid')
     
     def draw_vehicle(self, vehicle):
         """Desenha um veículo como retângulo com bordas arredondadas"""
@@ -357,55 +187,45 @@ class ParkingLotVisualizerPygame:
             color = BLUE if vehicle.state == VehicleState.PARKED else LIGHT_BLUE
             dark_color = DARK_BLUE
         
-        # Tamanho do retângulo (carro) - maior quando estacionado
-        if vehicle.state == VehicleState.PARKED:
-            width = 28
-            height = 18
-        else:
-            width = 28
-            height = 18
+        # Tamanho do retângulo
+        width = 28
+        height = 18
         
-        # Calcular ângulo de rotação baseado na direção
+        # Calcular ângulo de rotação
         if vehicle.state in [VehicleState.ARRIVING, VehicleState.DEPARTING]:
-            dx = vehicle.target_x - vehicle.x
-            dy = vehicle.target_y - vehicle.y
-            if abs(dx) > 0.1 or abs(dy) > 0.1:
-                angle = math.atan2(dy, dx)
+            # Verificar se ainda tem intermediate (ainda na estrada)
+            if hasattr(vehicle, 'intermediate_x') and hasattr(vehicle, 'intermediate_y'):
+                # Ainda na estrada, manter horizontal
+                angle = 0
+            else:
+                # Movendo para vaga ou voltando da vaga
+                dx = vehicle.target_x - vehicle.x
+                dy = vehicle.target_y - vehicle.y
+                if abs(dx) > 0.1 or abs(dy) > 0.1:
+                    angle = math.atan2(dy, dx)
+                else:
+                    angle = 0
+        else:
+            # Carros estacionados ficam perpendiculares à estrada
+            road_center = self.road_y + self.road_width // 2
+
+            if vehicle.y < road_center:
+                angle = -math.pi / 2  # Virado para cima
+            elif vehicle.y > road_center:
+                angle = math.pi / 2   # Virado para baixo
             else:
                 angle = 0
-        else:
-            # Carros estacionados ficam verticais (perpendiculares às vagas)
-            # Fileira superior: carros virados para baixo (90 graus)
-            # Fileira inferior: carros virados para cima (-90 graus)
-            # Estações: também verticais
-            if vehicle.spot_name == "Regular":
-                # Determinar fileira baseado na posição Y do veículo
-                top_row_center = self.parking_start_y + self.spot_height // 2
-                bottom_row_center = self.parking_start_y + self.spot_height + self.corridor_width + self.spot_height // 2
-                middle_y = (top_row_center + bottom_row_center) / 2
-                
-                if vehicle.y < middle_y:
-                    # Fileira superior: virado para baixo (90 graus)
-                    angle = math.pi / 2
-                else:
-                    # Fileira inferior: virado para cima (-90 graus)
-                    angle = -math.pi / 2
-            else:
-                # Estações de carregamento: vertical também (virado para baixo)
-                angle = math.pi / 2  # 90 graus
         
         # Desenhar retângulo arredondado rotacionado
-        # Criar uma superfície temporária para desenhar o retângulo arredondado
         temp_surface = pygame.Surface((width + 4, height + 4), pygame.SRCALPHA)
         temp_rect = pygame.Rect(2, 2, width, height)
-        radius = 4  # Raio das bordas arredondadas
+        radius = 4
         
-        # Desenhar retângulo arredondado na superfície temporária
         pygame.draw.rect(temp_surface, color, temp_rect, border_radius=radius)
         pygame.draw.rect(temp_surface, BLACK, temp_rect, 1, border_radius=radius)
         
-        # Desenhar janela (quadrado escuro no centro) - estilo da imagem
-        if vehicle.state == VehicleState.PARKED:
+        # Desenhar janela (sempre mostrar quando não está em movimento na estrada)
+        if vehicle.state == VehicleState.PARKED or (vehicle.state == VehicleState.DEPARTING and not hasattr(vehicle, 'intermediate_x')):
             window_size = 8
             window_rect = pygame.Rect(
                 (width - window_size) // 2 + 2,
@@ -415,14 +235,11 @@ class ParkingLotVisualizerPygame:
             )
             pygame.draw.rect(temp_surface, dark_color, window_rect)
         
-        # Rotacionar a superfície temporária
+        # Rotacionar
         if angle != 0:
             temp_surface = pygame.transform.rotate(temp_surface, -math.degrees(angle))
         
-        # Obter o retângulo da superfície rotacionada
         rotated_rect = temp_surface.get_rect(center=(int(vehicle.x), int(vehicle.y)))
-        
-        # Desenhar na tela principal
         self.screen.blit(temp_surface, rotated_rect)
     
     def draw_stats_panel(self):
@@ -432,12 +249,10 @@ class ParkingLotVisualizerPygame:
         panel_width = 270
         panel_height = self.height - 20
         
-        # Fundo do painel
         panel_rect = pygame.Rect(panel_x, panel_y, panel_width, panel_height)
         pygame.draw.rect(self.screen, DARK_GRAY, panel_rect)
         pygame.draw.rect(self.screen, WHITE, panel_rect, 2)
         
-        # Título
         title = self.title_font.render("Estatisticas", True, WHITE)
         self.screen.blit(title, (panel_x + 10, panel_y + 10))
         
@@ -456,7 +271,6 @@ class ParkingLotVisualizerPygame:
         y_offset = 45
         line_height = 22
         
-        # Estatísticas
         stats = [
             f"Tempo: {time:.1f} min",
             f"",
@@ -509,17 +323,17 @@ class ParkingLotVisualizerPygame:
             is_ev = event['is_ev']
             battery_level = event.get('battery_level')
             
-            # Posição inicial (vindo do topo, perto do SHOP - centralizado com estacionamento)
+            road_center_y = self.road_y + self.road_width // 2
             vehicle = VehicleVisual(
                 id=vehicle_id,
                 is_ev=is_ev,
-                x=self.shop_x + self.shop_width // 2,  # Começa no centro do SHOP
-                y=100,  # Vem do topo
+                x=-20,
+                y=road_center_y,
                 state=VehicleState.ARRIVING,
                 battery_level=battery_level,
-                target_x=self.shop_x + self.shop_width // 2,  # Primeiro alvo: centro do SHOP
-                target_y=100,
-                speed=1.5  # Velocidade mais lenta
+                target_x=100,
+                target_y=road_center_y,
+                speed=2.0
             )
             self.vehicles[vehicle_id] = vehicle
             
@@ -533,72 +347,107 @@ class ParkingLotVisualizerPygame:
                 vehicle.state = VehicleState.PARKED
                 vehicle.spot_name = spot_name
                 
-                # Calcular posição do spot
+                road_center_y = self.road_y + self.road_width // 2
+                
                 if is_cs:
-                    for cs in self.parking_lot.charging_stations:
-                        if cs.name == spot_name:
-                            if cs.name not in self.station_positions:
-                                break
-                            pos = self.station_positions[cs.name]
-                            
-                            # Encontrar uma vaga livre nesta estação
-                            spot_index = None
-                            for i in range(cs.num_spots):
-                                spot_key = (cs.name, i)
-                                if spot_key not in self.occupied_cs_spots:
-                                    spot_index = i
-                                    self.occupied_cs_spots[spot_key] = vehicle_id
-                                    break
-                            
-                            # Se não encontrou vaga livre, usar a última (fallback)
-                            if spot_index is None:
-                                spot_index = cs.num_spots - 1
-                                spot_key = (cs.name, spot_index)
-                                # Remover carro anterior se houver
-                                if spot_key in self.occupied_cs_spots:
-                                    old_vehicle_id = self.occupied_cs_spots[spot_key]
-                                    if old_vehicle_id in self.vehicles:
-                                        del self.vehicles[old_vehicle_id]
+                    if spot_name == "CS-Mid":
+                        pos = self.station_positions[spot_name]
+
+                        cs = next(cs for cs in self.parking_lot.charging_stations if cs.name == spot_name)
+
+                        spot_index = None
+                        for i in range(cs.num_spots):
+                            spot_key = (cs.name, i)
+                            if spot_key not in self.occupied_cs_spots:
+                                spot_index = i
                                 self.occupied_cs_spots[spot_key] = vehicle_id
-                            
-                            vehicle.target_x = pos['x'] + spot_index * (self.spot_width + self.spot_spacing) + self.spot_width // 2
-                            vehicle.target_y = pos['y'] + self.spot_height // 2
-                            break
-                else:
-                    # Vaga regular - encontrar uma vaga livre
-                    num_rows = 2
-                    spots_per_row = self.config['NUM_REGULAR_SPOTS'] // num_rows
+                                break
+
+                        if spot_index is None:
+                            # All spots full → force use of last spot
+                            spot_index = cs.num_spots - 1
+                            spot_key = (cs.name, spot_index)
+                            if spot_key in self.occupied_cs_spots:
+                                old_vehicle_id = self.occupied_cs_spots[spot_key]
+                                if old_vehicle_id in self.vehicles:
+                                    del self.vehicles[old_vehicle_id]
+                            self.occupied_cs_spots[spot_key] = vehicle_id
+                        
+                        # Spot Center
+                        spot_x = pos['x'] + spot_index * self.spot_width
+                        spot_y = pos['y']
+
+                        vehicle.intermediate_x = spot_x
+                        vehicle.intermediate_y = road_center_y
+                        vehicle.target_x = spot_x
+                        vehicle.target_y = spot_y
+
+                elif spot_name == "CS-Near":
+                    # pos = self.station_positions[spot_name]
+                    # cs = next(cs for cs in self.parking_lot.charging_stations if cs.name == spot_name)
+
+                    # # Prefer middle spot
+                    # spot_order = [1, 0, 2]
+                    # spot_index = None
+                    # for i in spot_order:
+                    #     spot_key = (cs.name, i)
+                    #     if spot_key not in self.occupied_cs_spots:
+                    #         self.occupied_cs_spots[spot_key] = vehicle_id
+                    #         spot_index = i
+                    #         break
+
+                    # if spot_index is None:
+                    #     spot_index = cs.num_spots - 1
+                    #     spot_key = (cs.name, spot_index)
+                    #     if spot_key in self.occupied_cs_spots:
+                    #         old_vehicle = self.occupied_cs_spots[spot_key]
+                    #         if old_vehicle in self.vehicles:
+                    #             del self.vehicles[old_vehicle]
+                    #     self.occupied_cs_spots[spot_key] = vehicle_id
+
+                    # # --- EXACT CENTER OF SPOT BASED ON YOUR DRAWING ---
+                    # spot_x = pos['x'] + (spot_index + 0.5) * self.spot_width
+                    # spot_y = pos['base_y'] + self.spot_height // 2 + 10   # <── CORRECT OFFSET
+
+                    # vehicle.intermediate_x = spot_x
+                    # vehicle.intermediate_y = road_center_y
+                    # vehicle.target_x = spot_x
+                    # vehicle.target_y = spot_y
+                    pass
                     
-                    # Tentar encontrar vaga livre
+
+                else:
+                    num_spots_per_side = self.config['NUM_REGULAR_SPOTS'] // 2
+                    
                     spot_found = False
-                    for row in range(num_rows):
-                        for col in range(spots_per_row):
-                            spot_key = (row, col)
+                    for side in range(2):
+                        for col in range(num_spots_per_side):
+                            spot_key = (side, col)
                             if spot_key not in self.occupied_regular_spots:
-                                # Vaga livre encontrada
                                 self.occupied_regular_spots[spot_key] = vehicle_id
                                 
-                                vehicle.target_x = self.parking_start_x + col * (self.spot_width + self.spot_spacing) + self.spot_width // 2
+                                spot_x = self.parking_start_x -50 + col * (self.spot_width + self.spot_spacing) + self.spot_width // 2
                                 
-                                # Fileira superior ou inferior
-                                if row == 0:
-                                    vehicle.target_y = self.parking_start_y + self.spot_height // 2
+                                vehicle.intermediate_x = spot_x
+                                vehicle.intermediate_y = road_center_y
+                                vehicle.target_x = spot_x
+                                
+                                if side == 0:
+                                    vehicle.target_y = self.road_y - self.spot_height - 25 + self.spot_height // 2
                                 else:
-                                    vehicle.target_y = self.parking_start_y + self.spot_height + self.corridor_width + self.spot_height // 2
+                                    vehicle.target_y = self.road_y + self.road_width + 25 + self.spot_height // 2
                                 
                                 spot_found = True
                                 break
                         if spot_found:
                             break
                     
-                    # Se não encontrou vaga livre, usar hash (fallback)
                     if not spot_found:
                         spot_num = hash(vehicle_id) % self.config['NUM_REGULAR_SPOTS']
-                        row = spot_num // spots_per_row
-                        col = spot_num % spots_per_row
-                        spot_key = (row, col)
+                        side = spot_num // num_spots_per_side
+                        col = spot_num % num_spots_per_side
+                        spot_key = (side, col)
                         
-                        # Remover carro anterior se houver
                         if spot_key in self.occupied_regular_spots:
                             old_vehicle_id = self.occupied_regular_spots[spot_key]
                             if old_vehicle_id in self.vehicles:
@@ -606,35 +455,37 @@ class ParkingLotVisualizerPygame:
                         
                         self.occupied_regular_spots[spot_key] = vehicle_id
                         
-                        vehicle.target_x = self.parking_start_x + col * (self.spot_width + self.spot_spacing) + self.spot_width // 2
+                        spot_x = self.parking_start_x - 50 + col * (self.spot_width + self.spot_spacing) + self.spot_width // 2
                         
-                        # Fileira superior ou inferior
-                        if row == 0:
-                            vehicle.target_y = self.parking_start_y + self.spot_height // 2
+                        vehicle.intermediate_x = spot_x
+                        vehicle.intermediate_y = road_center_y
+                        vehicle.target_x = spot_x
+                        
+                        if side == 0:
+                            vehicle.target_y = self.road_y - self.spot_height - 25 + self.spot_height // 2
                         else:
-                            vehicle.target_y = self.parking_start_y + self.spot_height + self.corridor_width + self.spot_height // 2
-                
-                # Não definir posição imediatamente - deixar animar até o spot
-                # vehicle.x e vehicle.y serão atualizados pela animação
+                            vehicle.target_y = self.road_y + self.road_width + 25 + self.spot_height // 2
         
         elif event_type == 'vehicle_depart':
             vehicle_id = event['vehicle_id']
             if vehicle_id in self.vehicles:
                 vehicle = self.vehicles[vehicle_id]
                 vehicle.state = VehicleState.DEPARTING
-                vehicle.target_x = self.shop_x + self.shop_width // 2  # Sair pelo topo (SHOP centralizado)
-                vehicle.target_y = 100
                 
-                # Liberar a vaga ocupada
+                road_center_y = self.road_y + self.road_width // 2
+                
+                vehicle.intermediate_x = vehicle.x
+                vehicle.intermediate_y = road_center_y
+                vehicle.target_x = self.width
+                vehicle.target_y = road_center_y
+                
                 if vehicle.spot_name:
                     if vehicle.spot_name == "Regular":
-                        # Procurar e remover da lista de vagas regulares ocupadas
                         for spot_key, vid in list(self.occupied_regular_spots.items()):
                             if vid == vehicle_id:
                                 del self.occupied_regular_spots[spot_key]
                                 break
                     else:
-                        # Procurar e remover da lista de vagas de CS ocupadas
                         for spot_key, vid in list(self.occupied_cs_spots.items()):
                             if vid == vehicle_id:
                                 del self.occupied_cs_spots[spot_key]
@@ -645,7 +496,6 @@ class ParkingLotVisualizerPygame:
             if vehicle_id in self.vehicles:
                 vehicle = self.vehicles[vehicle_id]
                 
-                # Liberar a vaga ocupada antes de remover
                 if vehicle.spot_name:
                     if vehicle.spot_name == "Regular":
                         for spot_key, vid in list(self.occupied_regular_spots.items()):
@@ -661,43 +511,59 @@ class ParkingLotVisualizerPygame:
                 del self.vehicles[vehicle_id]
     
     def update_vehicles(self):
-        """Atualiza posições dos veículos (animação)"""
+        """Atualiza posições dos veículos (animação com movimento em duas fases)"""
         for vehicle in self.vehicles.values():
             if vehicle.state in [VehicleState.ARRIVING, VehicleState.DEPARTING]:
-                # Mover em direção ao alvo
-                dx = vehicle.target_x - vehicle.x
-                dy = vehicle.target_y - vehicle.y
-                distance = math.sqrt(dx*dx + dy*dy)
-                
-                if distance > vehicle.speed:
-                    vehicle.x += (dx / distance) * vehicle.speed * self.speed
-                    vehicle.y += (dy / distance) * vehicle.speed * self.speed
-                else:
-                    vehicle.x = vehicle.target_x
-                    vehicle.y = vehicle.target_y
+                if hasattr(vehicle, 'intermediate_x') and hasattr(vehicle, 'intermediate_y'):
+                    dx_inter = vehicle.intermediate_x - vehicle.x
+                    dy_inter = vehicle.intermediate_y - vehicle.y
+                    distance_inter = math.sqrt(dx_inter*dx_inter + dy_inter*dy_inter)
                     
-                    # Se chegou na entrada e está chegando, mover para o estacionamento
-                    if vehicle.state == VehicleState.ARRIVING and vehicle.spot_name:
-                        # Já tem destino definido, continuar animando
-                        pass
-            elif vehicle.state == VehicleState.PARKED:
-                # Garantir que carros estacionados fiquem na posição correta
-                dx = vehicle.target_x - vehicle.x
-                dy = vehicle.target_y - vehicle.y
-                distance = math.sqrt(dx*dx + dy*dy)
-                
-                if distance > 1:
-                    # Ainda se movendo para o spot
-                    vehicle.x += (dx / distance) * vehicle.speed * self.speed
-                    vehicle.y += (dy / distance) * vehicle.speed * self.speed
+                    if distance_inter > vehicle.speed:
+                        vehicle.x += (dx_inter / distance_inter) * vehicle.speed * self.speed
+                        vehicle.y += (dy_inter / distance_inter) * vehicle.speed * self.speed
+                    else:
+                        vehicle.x = vehicle.intermediate_x
+                        vehicle.y = vehicle.intermediate_y
+                        delattr(vehicle, 'intermediate_x')
+                        delattr(vehicle, 'intermediate_y')
                 else:
-                    vehicle.x = vehicle.target_x
-                    vehicle.y = vehicle.target_y
-    
-    def add_event(self, event):
-        """Adiciona evento à queue"""
-        if self.running:
-            self.event_queue.put(event)
+                    dx = vehicle.target_x - vehicle.x
+                    dy = vehicle.target_y - vehicle.y
+                    distance = math.sqrt(dx*dx + dy*dy)
+                    
+                    if distance > vehicle.speed:
+                        vehicle.x += (dx / distance) * vehicle.speed * self.speed
+                        vehicle.y += (dy / distance) * vehicle.speed * self.speed
+                    else:
+                        vehicle.x = vehicle.target_x
+                        vehicle.y = vehicle.target_y
+            
+            elif vehicle.state == VehicleState.PARKED:
+                if hasattr(vehicle, 'intermediate_x') and hasattr(vehicle, 'intermediate_y'):
+                    dx_inter = vehicle.intermediate_x - vehicle.x
+                    dy_inter = vehicle.intermediate_y - vehicle.y
+                    distance_inter = math.sqrt(dx_inter*dx_inter + dy_inter*dy_inter)
+                    
+                    if distance_inter > vehicle.speed:
+                        vehicle.x += (dx_inter / distance_inter) * vehicle.speed * self.speed
+                        vehicle.y += (dy_inter / distance_inter) * vehicle.speed * self.speed
+                    else:
+                        vehicle.x = vehicle.intermediate_x
+                        vehicle.y = vehicle.intermediate_y
+                        delattr(vehicle, 'intermediate_x')
+                        delattr(vehicle, 'intermediate_y')
+                else:
+                    dx = vehicle.target_x - vehicle.x
+                    dy = vehicle.target_y - vehicle.y
+                    distance = math.sqrt(dx*dx + dy*dy)
+                    
+                    if distance > 1:
+                        vehicle.x += (dx / distance) * vehicle.speed * self.speed
+                        vehicle.y += (dy / distance) * vehicle.speed * self.speed
+                    else:
+                        vehicle.x = vehicle.target_x
+                        vehicle.y = vehicle.target_y
     
     def run(self):
         """Loop principal da visualização"""
@@ -707,7 +573,6 @@ class ParkingLotVisualizerPygame:
         running = True
         
         while running:
-            # Processar eventos do Pygame
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
@@ -724,7 +589,6 @@ class ParkingLotVisualizerPygame:
                         self.speed = max(self.speed - 0.5, 0.5)
                         print(f"   Velocidade: {self.speed:.1f}x")
             
-            # Processar eventos da simulação
             while not self.event_queue.empty():
                 try:
                     event = self.event_queue.get_nowait()
@@ -732,29 +596,19 @@ class ParkingLotVisualizerPygame:
                 except queue.Empty:
                     break
             
-            # Atualizar veículos
             if not self.paused:
                 self.update_vehicles()
             
-            # Desenhar
-            self.screen.fill(PARKING_GRAY)  # Fundo escuro (asfalto)
+            self.screen.fill(PARKING_GRAY)
             
-            # Desenhar elementos estáticos (ordem importa para sobreposição)
-            self.draw_entrance()  # SHOP primeiro
-            for cs in self.parking_lot.charging_stations:
-                self.draw_charging_station(cs)  # Estações na mesma linha do SHOP
-            self.draw_regular_parking_area()  # Estacionamento abaixo
-            
-            # Desenhar veículos
             for vehicle in self.vehicles.values():
                 self.draw_vehicle(vehicle)
             
-            # Desenhar painel de estatísticas
+            self.draw_parking_lot()
             self.draw_stats_panel()
             
-            # Atualizar display
             pygame.display.flip()
-            self.clock.tick(60)  # 60 FPS
+            self.clock.tick(60)
         
         self.running = False
         pygame.quit()
