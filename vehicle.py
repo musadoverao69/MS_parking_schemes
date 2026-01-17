@@ -1,5 +1,7 @@
 import pygame
 import math
+import random 
+
 class vehicle:
     def __init__(self, screen, id , is_ev, speed,state, position, park_duration=0):
         self.id = id
@@ -17,6 +19,11 @@ class vehicle:
         self.angle = 0 
         self.park_duration = park_duration
 
+        if self.is_ev:
+            self.battery_capacity = 75
+            self.soc_arrival = random.uniform(0.1, 0.9)
+            self.charge_rate = 7.2
+
     def set_path(self,path):
         self.path = path
         self.target_index = 0
@@ -24,7 +31,10 @@ class vehicle:
     def draw_vehicle(self):
         surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
 
-        body_color = (255, 40, 0) 
+        if self.is_ev:
+            body_color = (0, 255, 40)
+        else:
+            body_color = (255, 40, 0) 
         pygame.draw.rect(surf, body_color, (0, self.height * 0.2, self.width, self.height * 0.6), border_radius=6)
 
         pygame.draw.rect(surf, (150, 0, 0), (self.width * 0.25, 0, self.width * 0.5, self.height * 0.4), border_radius=4)

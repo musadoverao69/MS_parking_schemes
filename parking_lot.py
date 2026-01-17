@@ -15,7 +15,7 @@ class parkingLot():
         self.nodes = []
         self.spots = {
             "regular": [],
-            "cs-near": []
+            "ev": []
         }
         self.roads = []
         self.vehicles = []
@@ -54,21 +54,30 @@ class parkingLot():
         
         # Spots
         for i in range(10):
-            self.spots["regular"].append(spot.spot(self.screen,200 + i * 100,300,"regular"))
+            if i < 3:
+                self.spots["ev"].append(spot.spot(self.screen,200 + i * 100,300,"ev"))
+            else:
+                self.spots["regular"].append(spot.spot(self.screen,200 + i * 100,300,"regular"))
             self.grid[6][4 + i] = 2
             self.grid[6][23 - i] = 2
             self.grid[7][4 + i] = 2
             self.grid[7][23 - i] = 2
         
         for i in range(6):
-            self.spots["regular"].append(spot.spot(self.screen,200 + i * 100,600,"regular"))
+            if i < 3:
+                self.spots["ev"].append(spot.spot(self.screen,200 + i * 100,600,"ev"))
+            else:
+                self.spots["regular"].append(spot.spot(self.screen,200 + i * 100,600,"regular"))
             self.grid[12][4 + i] = 2
             self.grid[12][15 - i] = 2
             self.grid[13][4 + i] = 2
             self.grid[13][15 - i] = 2
 
         for i in range(10):
-            self.spots["regular"].append(spot.spot(self.screen,200 + i * 100,100,"regular"))
+            if i < 3:
+                self.spots["ev"].append(spot.spot(self.screen,200 + i * 100,100,"ev"))
+            else:   
+                self.spots["regular"].append(spot.spot(self.screen,200 + i * 100,100,"regular"))
             self.grid[2][4 + i] = 2
             self.grid[2][23 - i] = 2
             self.grid[3][4 + i] = 2
@@ -226,13 +235,18 @@ class parkingLot():
                     vehicle.target = s
                     s.occupied = True
                     return 1
+        else:
+            for s in self.spots["ev"]:
+                if not s.occupied:
+                    vehicle.target = s
+                    s.occupied = True
+                    return 1
         return -1
 
     def heuristic(self, a, b):
         return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
     def add_vehicle(self, car):
-        car.is_ev = False
         new_veh = vehicle.vehicle(self.screen, car.id, car.is_ev, 2.5, "parking", self.entrance, car.park_duration)
         
         if self.assign_spot(new_veh) != -1:

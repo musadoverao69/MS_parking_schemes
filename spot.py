@@ -12,5 +12,8 @@ class spot:
         self.height = 100
 
     def draw_spot(self):
-        color = (0, 0, 0)
+        if self.type == "ev":
+            color = (0, 255, 0)
+        else:
+            color = (0, 0, 0)
         pygame.draw.rect(self.screen, color, (self.x, self.y, self.height, self.width), 2)
